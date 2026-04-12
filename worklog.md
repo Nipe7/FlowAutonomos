@@ -72,3 +72,29 @@ Stage Summary:
 - API will NEVER exceed 4 paid calls per day; repeated searches are free via cache
 - After daily limit, seamless switch to OpenStreetMap (users won't notice the difference)
 - Sinergias design preserved untouched; only added data indicators
+
+---
+Task ID: 4
+Agent: Main
+Task: Replace hero video with animated image (parallax + micro-animations)
+
+Work Log:
+- Replaced Mixkit video background with user's 4-panel crafts image (hero-crafts.png, 1408x768)
+- Implemented Ken Burns effect: 35s cinematic zoom+pan animation (slow, subtle, elegant)
+- Added scroll parallax via framer-motion (useScroll + useTransform): image moves slower than scroll
+- Created 4 types of CSS particle systems for each panel:
+  - Carpintero (top-left): 8 sawdust particles floating upward with rotation
+  - Barista (bottom-left): 6 steam wisps rising and expanding
+  - Ceramista (top-right): 4 spinning clay rings
+  - Fontanero (bottom-right): 7 shimmering water drops
+- Added texture shimmer overlay (8s pulse) for subtle depth
+- Maintained all existing overlays (green-blue gradient, vignette, scan lines)
+- All particle animations use will-change for GPU acceleration
+- Image filter: blur(3px) brightness(0.25) saturate(1.1) — darker than video for text readability
+- ESLint passes with zero errors
+
+Stage Summary:
+- Video replaced with lightweight static image (~2.4MB vs streaming video)
+- Much faster page load: no video buffering or network requests
+- Cinematic feel preserved via Ken Burns + parallax + particle effects
+- Each panel has unique micro-animation matching its trade (wood dust, steam, clay spin, water shimmer)

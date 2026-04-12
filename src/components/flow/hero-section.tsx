@@ -1,25 +1,117 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { motion, useScroll, useTransform } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
+import { useRef, useMemo } from 'react'
+
+// Generador de partículas para cada zona del oficio
+function generateParticles(type: 'sawdust' | 'steam' | 'clay' | 'water', count: number) {
+  const particles = []
+  for (let i = 0; i < count; i++) {
+    const seed = Math.random()
+    particles.push({
+      id: i,
+      className:
+        type === 'sawdust' ? 'sawdust-particle' :
+        type === 'steam' ? 'steam-wisp' :
+        type === 'clay' ? 'clay-spin' : 'water-drop',
+      // Posición dentro de la zona (en %)
+      style: type === 'sawdust' ? {
+        left: `${8 + seed * 18}%`,
+        top: `${15 + seed * 25}%`,
+        width: `${3 + seed * 4}px`,
+        height: `${3 + seed * 4}px`,
+        animationDuration: `${3.5 + seed * 3}s`,
+        animationDelay: `${seed * 2.5}s`,
+      } : type === 'steam' ? {
+        left: `${5 + seed * 20}%`,
+        top: `${60 + seed * 15}%`,
+        width: `${8 + seed * 12}px`,
+        height: `${6 + seed * 10}px`,
+        animationDuration: `${4 + seed * 3}s`,
+        animationDelay: `${seed * 2}s`,
+      } : type === 'clay' ? {
+        left: `${68 + seed * 18}%`,
+        top: `${15 + seed * 25}%`,
+        width: `${12 + seed * 18}px`,
+        height: `${12 + seed * 18}px`,
+        animationDuration: `${5 + seed * 4}s`,
+        animationDelay: `${seed * 2}s`,
+      } : {
+        left: `${68 + seed * 18}%`,
+        top: `${60 + seed * 20}%`,
+        width: `${3 + seed * 5}px`,
+        height: `${3 + seed * 5}px`,
+        animationDuration: `${2 + seed * 3}s`,
+        animationDelay: `${seed * 2.5}s`,
+      },
+    })
+  }
+  return particles
+}
 
 export default function HeroSection() {
+  const sectionRef = useRef<HTMLElement>(null)
+
+  // Parallax de scroll: la imagen se mueve más despacio que el scroll
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ['start start', 'end start'],
+  })
+  const imageY = useTransform(scrollYProgress, [0, 1], ['0%', '15%'])
+  const imageScale = useTransform(scrollYProgress, [0, 1], [1, 1.08])
+
+  // Generar partículas (memoized para no regenerar cada render)
+  const sawdustParticles = useMemo(() => generateParticles('sawdust', 8), [])
+  const steamParticles = useMemo(() => generateParticles('steam', 6), [])
+  const clayParticles = useMemo(() => generateParticles('clay', 4), [])
+  const waterParticles = useMemo(() => generateParticles('water', 7), [])
+
   return (
     <section
+      ref={sectionRef}
       id="inicio"
       className="relative flex items-center justify-center overflow-hidden"
       style={{ height: '100vh', minHeight: '560px' }}
     >
-      {/* VIDEO BACKGROUND */}
-      <div className="hero-video">
-        <video autoPlay loop muted playsInline>
-          <source src="https://assets.mixkit.co/videos/4735/4735-720.mp4" type="video/mp4" />
-        </video>
+      {/* CINEMATIC IMAGE BACKGROUND with parallax */}
+      <div className="hero-image-bg">
+        <motion.img
+          src="/hero-crafts.png"
+          alt=""
+          style={{ y: imageY, scale: imageScale }}
+        />
+      </div>
+
+      {/* PARTICLE OVERLAYS - micro-movimientos por zona */}
+      <div className="hero-particles">
+        {/* Virutas de madera - zona carpintero (top-left) */}
+        {sawdustParticles.map((p) => (
+          <span key={`saw-${p.id}`} className={p.className} style={p.style} />
+        ))}
+
+        {/* Vapor de café - zona barista (bottom-left) */}
+        {steamParticles.map((p) => (
+          <span key={`stm-${p.id}`} className={p.className} style={p.style} />
+        ))}
+
+        {/* Giro de arcilla - zona ceramista (top-right) */}
+        {clayParticles.map((p) => (
+          <span key={`clay-${p.id}`} className={p.className} style={p.style} />
+        ))}
+
+        {/* Gotas de agua - zona fontanero (bottom-right) */}
+        {waterParticles.map((p) => (
+          <span key={`wat-${p.id}`} className={p.className} style={p.style} />
+        ))}
+
+        {/* Brillo sutil de textura sobre toda la imagen */}
+        <div className="hero-texture-shimmer" />
       </div>
 
       {/* OVERLAY 1: Radial green-blue gradient */}
       <div
-        className="absolute inset-0 z-[1] pointer-events-none"
+        className="absolute inset-0 z-[2] pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(68,196,120,.09) 0%, rgba(86,108,131,.06) 40%, rgba(2,2,2,1) 78%)',
         }}
@@ -27,7 +119,7 @@ export default function HeroSection() {
 
       {/* OVERLAY 2: Dark vignette */}
       <div
-        className="absolute inset-0 z-[2] pointer-events-none"
+        className="absolute inset-0 z-[3] pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse 60% 50% at 50% 50%, transparent, rgba(2,2,2,.58))',
         }}

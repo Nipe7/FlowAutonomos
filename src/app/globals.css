@@ -207,15 +207,15 @@
   box-shadow: 0 6px 24px rgba(255,107,53,0.15), 0 2px 8px rgba(255,107,53,0.08);
 }
 
-/* ====== HERO VIDEO ====== */
-.hero-video {
+/* ====== HERO CINEMATIC IMAGE ====== */
+.hero-image-bg {
   position: absolute;
   inset: 0;
   overflow: hidden;
   z-index: 0;
 }
 
-.hero-video video {
+.hero-image-bg img {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -223,9 +223,161 @@
   min-height: 100%;
   width: auto;
   height: auto;
-  transform: translate(-50%, -50%) scale(1.06);
-  filter: blur(4px) brightness(0.2);
+  transform: translate(-50%, -50%) scale(1.08);
+  filter: blur(3px) brightness(0.25) saturate(1.1);
   object-fit: cover;
+  animation: kenBurnsHero 35s ease-in-out infinite alternate;
+}
+
+/* Ken Burns - lento zoom + paneo cinematográfico */
+@keyframes kenBurnsHero {
+  0% {
+    transform: translate(-50%, -48%) scale(1.08);
+  }
+  35% {
+    transform: translate(-52%, -50%) scale(1.12);
+  }
+  70% {
+    transform: translate(-48%, -52%) scale(1.14);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.16);
+  }
+}
+
+/* ====== HERO PARTICLES OVERLAY ====== */
+.hero-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* --- Virutas de madera (zona carpintero, top-left) --- */
+.sawdust-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(210,170,110,0.6) 0%, rgba(180,140,80,0.1) 70%, transparent 100%);
+  animation: floatSawdust linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes floatSawdust {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(-40px) translateX(15px) rotate(180deg) scale(0.6);
+    opacity: 0.5;
+  }
+  92% {
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateY(-80px) translateX(25px) rotate(360deg) scale(0.2);
+    opacity: 0;
+  }
+}
+
+/* --- Vapor de café (zona barista, bottom-left) --- */
+.steam-wisp {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(200,200,210,0.25) 0%, rgba(180,180,190,0.08) 50%, transparent 100%);
+  filter: blur(3px);
+  animation: riseSteam linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes riseSteam {
+  0% {
+    transform: translateY(0) scaleX(1) scaleY(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.5;
+  }
+  40% {
+    transform: translateY(-35px) scaleX(1.5) scaleY(0.8);
+    opacity: 0.35;
+  }
+  70% {
+    transform: translateY(-60px) scaleX(2) scaleY(0.6);
+    opacity: 0.15;
+  }
+  100% {
+    transform: translateY(-90px) scaleX(2.5) scaleY(0.4);
+    opacity: 0;
+  }
+}
+
+/* --- Giro de arcilla (zona ceramista, top-right) --- */
+.clay-spin {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(180,130,90,0.15);
+  animation: spinClay linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes spinClay {
+  0% {
+    transform: rotate(0deg) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.4;
+  }
+  85% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: rotate(360deg) scale(1.2);
+    opacity: 0;
+  }
+}
+
+/* --- Gotas de agua (zona fontanero, bottom-right) --- */
+.water-drop {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(100,180,255,0.5) 0%, rgba(80,160,240,0.15) 60%, transparent 100%);
+  animation: shimmerDrop ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+@keyframes shimmerDrop {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+}
+
+/* --- Pulso de textura (brillo sutil en toda la imagen) --- */
+@keyframes texturePulse {
+  0%, 100% {
+    opacity: 0.03;
+  }
+  50% {
+    opacity: 0.07;
+  }
+}
+
+.hero-texture-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 20%, rgba(255,255,255,0.04) 50%, transparent 80%);
+  animation: texturePulse 8s ease-in-out infinite;
+  pointer-events: none;
 }
 
 /* Hero scan lines */
