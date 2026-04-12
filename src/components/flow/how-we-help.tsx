@@ -102,6 +102,16 @@ export default function HowWeHelp() {
           >
             La ayuda es gratis, si te la cobran pasa a ser negocio. Aquí encontrarás mucha ayuda con diferentes herramientas para{' '}
             <strong style={{ color: '#44c478' }}>refrescar la ilusión de abrir puertas cada día</strong>.
+          </p>
+          <p
+            style={{
+              fontFamily: 'var(--font-inter), Inter, sans-serif',
+              fontSize: '1.04rem',
+              lineHeight: 1.95,
+              opacity: 0.88,
+              marginTop: '1.2rem',
+            }}
+          >
             Si lo que quieres es negociar conmigo, te dejo abajo mi ebook y mis redes para que contactes.
           </p>
         </motion.div>
