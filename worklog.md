@@ -49,3 +49,26 @@ Stage Summary:
 - RapidAPI connected with automatic fallback to OpenStreetMap
 - Sinergias now shows rich Google Places data when available
 - System is zero-cost: if RapidAPI credits run out, Overpass takes over automatically
+
+---
+Task ID: 3
+Agent: Main
+Task: Add API usage limits (4 searches/day) + 24h cache + enhanced fallback
+
+Work Log:
+- Added 24h in-memory cache system: same search query doesn't consume API credits
+- Added daily usage limit: max 4 RapidAPI calls per day, auto-resets at midnight
+- After 4 searches, all queries automatically use OpenStreetMap/Overpass (free, unlimited)
+- Cache auto-cleanup every 30 minutes to prevent memory leaks
+- Added timeout protection: RapidAPI 8s, Nominatim 6s, Overpass 12s
+- Added rate limit detection (HTTP 429) with automatic fallback
+- Updated Sinergias component: shows remaining searches counter (X/4), cache indicator (⚡), and website link
+- Enhanced Overpass fallback: now extracts phone, website, and hours from OSM tags
+- RapidAPI key stored in .env (RAPIDAPI_KEY + RAPIDAPI_HOST)
+- ESLint passes with zero errors
+
+Stage Summary:
+- Complete credit protection system: cache (24h) + limit (4/day) + fallback (Overpass)
+- API will NEVER exceed 4 paid calls per day; repeated searches are free via cache
+- After daily limit, seamless switch to OpenStreetMap (users won't notice the difference)
+- Sinergias design preserved untouched; only added data indicators

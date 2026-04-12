@@ -44,6 +44,8 @@ export default function SinergiasSection() {
   const [aiSuggestions, setAiSuggestions] = useState<{ type: string; text: string }[]>([])
   const [businessResults, setBusinessResults] = useState<Business[]>([])
   const [dataSource, setDataSource] = useState('')
+  const [remainingSearches, setRemainingSearches] = useState<number | null>(null)
+  const [fromCache, setFromCache] = useState(false)
   const [error, setError] = useState('')
 
   const resetAll = () => {
@@ -51,6 +53,8 @@ export default function SinergiasSection() {
     setBusinessResults([])
     setAiSuggestions([])
     setDataSource('')
+    setRemainingSearches(null)
+    setFromCache(false)
     setError('')
     setSector('')
     setZona('')
@@ -75,6 +79,8 @@ export default function SinergiasSection() {
       else {
         setBusinessResults(data.results || [])
         setDataSource(data.source || '')
+        setRemainingSearches(data.remainingSearches ?? null)
+        setFromCache(data.cached === true)
       }
     } catch {
       setError('Error al buscar. Inténtalo de nuevo.')
@@ -113,6 +119,8 @@ export default function SinergiasSection() {
           if (bizData.results) {
             setBusinessResults(bizData.results)
             setDataSource(bizData.source || '')
+            setRemainingSearches(bizData.remainingSearches ?? null)
+            setFromCache(bizData.cached === true)
           }
         } catch { /* no pasa nada */ }
       }
@@ -346,9 +354,16 @@ export default function SinergiasSection() {
                         Negocios cerca de ti
                       </h3>
                     </div>
-                    <span className="text-[10px] text-[#eaecee]/25 uppercase tracking-wider">
-                      {dataSource === 'google_places' ? 'Google Maps' : 'OpenStreetMap'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {remainingSearches !== null && dataSource === 'google_places' && (
+                        <span className="text-[10px] text-[#eaecee]/20">
+                          {fromCache ? '⚡' : ''} {remainingSearches}/4
+                        </span>
+                      )}
+                      <span className="text-[10px] text-[#eaecee]/25 uppercase tracking-wider">
+                        {dataSource === 'google_places' ? 'Google Maps' : 'OpenStreetMap'}
+                      </span>
+                    </div>
                   </div>
                   <div className="max-h-[480px] overflow-y-auto pr-1 space-y-2">
                     {businessResults.map((biz, index) => (
@@ -409,6 +424,11 @@ export default function SinergiasSection() {
                                 <span className="flex items-center gap-1 text-[#eaecee]/25 text-[10px]">
                                   <Phone className="w-2.5 h-2.5" /> {biz.phone}
                                 </span>
+                              )}
+                              {biz.website && (
+                                <a href={biz.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#eaecee]/25 hover:text-[#44c478]/60 text-[10px] transition-colors">
+                                  <Globe className="w-2.5 h-2.5" /> Web
+                                </a>
                               )}
                               {biz.openNow !== undefined && (
                                 <span className={`flex items-center gap-1 text-[10px] font-medium ${biz.openNow ? 'text-[#44c478]/60' : 'text-[#FF6B35]/60'}`}>
