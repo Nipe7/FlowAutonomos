@@ -82,7 +82,9 @@ export default function EbookSection() {
 
           {/* Buy button — orange border style */}
           <a
-            href="#"
+            href="https://go.hotmart.com/M105158609F"
+            target="_blank"
+            rel="noopener noreferrer"
             className="hero-btn hero-btn-orange inline-block no-underline"
             style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif' }}
           >
