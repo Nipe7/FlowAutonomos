@@ -20,9 +20,8 @@ interface BusinessResult {
 
 // ============================================================
 // SISTEMA DE CACHÉ EN MEMORIA (24h)
-// Mismo término de búsqueda no gasta créditos
 // ============================================================
-const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 horas en ms
+const CACHE_TTL = 24 * 60 * 60 * 1000
 
 interface CacheEntry {
   results: BusinessResult[]
@@ -52,25 +51,14 @@ function setCache(query: string, results: BusinessResult[], source: string): voi
   searchCache.set(key, { results, source, timestamp: Date.now() })
 }
 
-// Limpiar caché cada 30 min para no acumular memoria
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, entry] of searchCache.entries()) {
-    if (now - entry.timestamp > CACHE_TTL) {
-      searchCache.delete(key)
-    }
-  }
-}, 30 * 60 * 1000)
-
 // ============================================================
 // SISTEMA DE LÍMITE DE USO RAPIDAPI
-// Máximo 4 búsquedas diarias → después solo OpenStreetMap
 // ============================================================
 const MAX_RAPIDAPI_CALLS_PER_DAY = 4
 
 interface ApiUsageRecord {
   count: number
-  date: string // YYYY-MM-DD
+  date: string
 }
 
 let apiUsage: ApiUsageRecord = {
@@ -80,7 +68,6 @@ let apiUsage: ApiUsageRecord = {
 
 function canUseRapidAPI(): boolean {
   const today = new Date().toISOString().split('T')[0]
-  // Resetear contador si es un nuevo día
   if (apiUsage.date !== today) {
     apiUsage = { count: 0, date: today }
   }
@@ -119,7 +106,7 @@ export async function GET(req: NextRequest) {
 
     const searchQuery = query.trim()
 
-    // 1. Comprobar caché primero (no gasta créditos)
+    // 1. Comprobar caché primero
     const cached = getCached(searchQuery)
     if (cached) {
       return NextResponse.json({
@@ -130,17 +117,15 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // 2. Si no está en caché, buscar
+    // 2. Intentar RapidAPI si hay créditos disponibles
     const rapidApiKey = process.env.RAPIDAPI_KEY
     const rapidApiHost = process.env.RAPIDAPI_HOST
 
-    // 3. Intentar RapidAPI si hay créditos disponibles
     if (rapidApiKey && rapidApiHost && canUseRapidAPI()) {
       try {
         const rapidResults = await searchRapidAPI(searchQuery, rapidApiKey, rapidApiHost)
         if (rapidResults.length > 0) {
           incrementRapidAPIUsage()
-          // Guardar en caché para no repetir la búsqueda
           setCache(searchQuery, rapidResults, 'google_places')
           return NextResponse.json({
             results: rapidResults,
@@ -154,9 +139,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 4. Fallback: OpenStreetMap / Overpass (gratis, sin límite)
+    // 3. Fallback: OpenStreetMap / Overpass (gratis, sin límite)
     const overpassResults = await searchOverpass(searchQuery)
-    // También cachear resultados de Overpass
     setCache(searchQuery, overpassResults, 'openstreetmap')
     return NextResponse.json({
       results: overpassResults,
@@ -168,7 +152,7 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error('Search error:', error)
     return NextResponse.json(
-      { error: 'Error al realizar la búsqueda.' },
+      { error: 'Error al realizar la búsqueda: ' + (error.message || 'Error desconocido') },
       { status: 500 }
     )
   }
@@ -178,12 +162,10 @@ export async function GET(req: NextRequest) {
 // RAPIDAPI — Local Business Data (Google Places)
 // ============================================================
 async function searchRapidAPI(query: string, apiKey: string, host: string): Promise<BusinessResult[]> {
-  // Parsear consulta: "restaurantes en Madrid" → query: "restaurantes", city: "Madrid"
   const parts = query.split(/\s+en\s+/i)
   let searchQuery = parts[0] || query
   let city = parts[1] || ''
 
-  // Si no tiene "en", intentar detectar ciudades españolas
   if (!city) {
     const spanishCities = [
       'madrid', 'barcelona', 'valencia', 'sevilla', 'malaga', 'bilbao', 'granada',
@@ -207,7 +189,6 @@ async function searchRapidAPI(query: string, apiKey: string, host: string): Prom
     }
   }
 
-  // Llamar al endpoint search-by-query
   const url = `https://${host}/search-by-query`
   const params = new URLSearchParams({
     query: searchQuery,
@@ -222,13 +203,12 @@ async function searchRapidAPI(query: string, apiKey: string, host: string): Prom
       'X-RapidAPI-Key': apiKey,
       'X-RapidAPI-Host': host,
     },
-    signal: AbortSignal.timeout(8000), // Timeout 8s
+    signal: AbortSignal.timeout(8000),
   })
 
   if (!response.ok) {
     const status = response.status
     if (status === 429) {
-      // Rate limit alcanzado
       console.warn('RapidAPI rate limit reached (429)')
       throw new Error('RATE_LIMIT')
     }
@@ -258,7 +238,6 @@ async function searchRapidAPI(query: string, apiKey: string, host: string): Prom
     const rating = biz.rating || biz.score || 0
     const totalReviews = biz.reviewsCount || biz.totalReviews || biz.userRatingsTotal || 0
 
-    // Foto del negocio
     let photo = ''
     if (biz.photoUrl) photo = biz.photoUrl
     else if (biz.photos?.[0]) {
@@ -267,10 +246,8 @@ async function searchRapidAPI(query: string, apiKey: string, host: string): Prom
         : biz.photos[0]?.url || biz.photos[0]?.photoUrl || ''
     }
 
-    // Google Maps link
     const mapsUrl = biz.googleMapsUri || biz.url || biz.website || '#'
 
-    // Horarios
     let hours: string | undefined
     if (biz.workingHours) {
       hours = typeof biz.workingHours === 'string'
@@ -301,39 +278,73 @@ async function searchRapidAPI(query: string, apiKey: string, host: string): Prom
 // FALLBACK: OpenStreetMap / Overpass API (gratis, sin límite)
 // ============================================================
 async function searchOverpass(query: string): Promise<BusinessResult[]> {
-  // Geocodificar la consulta
-  const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&accept-language=es`
+  // Estrategia: buscar por zona/ciudad en Nominatim y luego buscar negocios cercanos
+  let lat: number | undefined
+  let lon: number | undefined
+  let displayName = ''
 
-  let geocodeResult
+  // 1. Geocodificar la consulta con Nominatim
   try {
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&accept-language=es`
     const geoRes = await fetch(nominatimUrl, {
       headers: { 'User-Agent': 'FlowAutonomos/1.0' },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(8000),
     })
-    geocodeResult = await geoRes.json()
-  } catch {
+    const geocodeResult = await geoRes.json()
+
+    if (geocodeResult && geocodeResult.length > 0) {
+      lat = parseFloat(geocodeResult[0].lat)
+      lon = parseFloat(geocodeResult[0].lon)
+      displayName = geocodeResult[0].display_name || ''
+    }
+  } catch (err) {
+    console.warn('Nominatim geocoding failed:', err)
+  }
+
+  // 2. Si Nominatim no encontró nada, intentar extraer ciudad y buscar coordenadas por nombre
+  if (!lat || !lon) {
+    try {
+      const cleanQuery = query.replace(/[áà]/g, 'a').replace(/[éè]/g, 'e')
+        .replace(/[íì]/g, 'i').replace(/[óò]/g, 'o').replace(/[úù]/g, 'u')
+        .split(/\s+/).pop() || query
+
+      const cityUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanQuery + ' España')}&limit=1&accept-language=es`
+      const cityRes = await fetch(cityUrl, {
+        headers: { 'User-Agent': 'FlowAutonomos/1.0' },
+        signal: AbortSignal.timeout(6000),
+      })
+      const cityResult = await cityRes.json()
+
+      if (cityResult && cityResult.length > 0) {
+        lat = parseFloat(cityResult[0].lat)
+        lon = parseFloat(cityResult[0].lon)
+        displayName = cityResult[0].display_name || ''
+      }
+    } catch {
+      // Si tampoco funciona, devolver vacío
+    }
+  }
+
+  if (!lat || !lon) {
     return []
   }
 
-  if (!geocodeResult || geocodeResult.length === 0) {
-    return []
-  }
+  // 3. Buscar negocios con Overpass - query MÁS AMPLIA
+  const radius = 5000 // 5km para más resultados
 
-  const { lat, lon, display_name } = geocodeResult[0]
-  const radius = 3000
-
-  // Construir consulta Overpass QL
   const overpassQuery = `
-    [out:json][timeout:10];
+    [out:json][timeout:12];
     (
       node["shop"](around:${radius},${lat},${lon});
-      node["amenity"~"restaurant|cafe|bar|bakery|butcher|hairdresser|beauty|dentist|pharmacy|veterinary"](around:${radius},${lat},${lon});
+      node["amenity"](around:${radius},${lat},${lon});
       node["office"](around:${radius},${lat},${lon});
       node["craft"](around:${radius},${lat},${lon});
+      node["tourism"~"hotel|hostel|guest_house|apartment"](around:${radius},${lat},${lon});
       way["shop"](around:${radius},${lat},${lon});
-      way["amenity"~"restaurant|cafe|bar|bakery|butcher|hairdresser|beauty|dentist|pharmacy|veterinary"](around:${radius},${lat},${lon});
+      way["amenity"](around:${radius},${lat},${lon});
       way["office"](around:${radius},${lat},${lon});
       way["craft"](around:${radius},${lat},${lon});
+      way["tourism"~"hotel|hostel|guest_house|apartment"](around:${radius},${lat},${lon});
     );
     out center;
   `
@@ -343,7 +354,7 @@ async function searchOverpass(query: string): Promise<BusinessResult[]> {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `data=${encodeURIComponent(overpassQuery)}`,
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(15000),
     })
     const data = await overpassRes.json()
 
@@ -351,41 +362,58 @@ async function searchOverpass(query: string): Promise<BusinessResult[]> {
       return []
     }
 
-    return data.elements.slice(0, 20).map((element: any) => {
+    // Filtrar solo elementos que tengan nombre (negocios reales)
+    const namedElements = data.elements.filter((el: any) => el.tags?.name)
+
+    if (namedElements.length === 0) {
+      return []
+    }
+
+    return namedElements.slice(0, 20).map((element: any) => {
       const tags = element.tags || {}
       const elLat = element.lat || element.center?.lat
       const elLon = element.lon || element.center?.lon
+
+      // Determinar tipo de negocio con mejor descripción
       const type = tags.shop || tags.amenity || tags.office || tags.craft || tags.tourism || 'Negocio'
-      const name = tags.name || `${type.charAt(0).toUpperCase() + type.slice(1)}`
+
+      // Mapear tipos de amenity a nombres más legibles
+      const amenityNames: Record<string, string> = {
+        restaurant: 'Restaurante', cafe: 'Cafetería', bar: 'Bar',
+        bakery: 'Panadería', butcher: 'Carnicería', hairdresser: 'Peluquería',
+        beauty: 'Salón de belleza', dentist: 'Dentista', pharmacy: 'Farmacia',
+        veterinary: 'Veterinario', bank: 'Banco', atm: 'Cajero',
+        fuel: 'Gasolinera', post_office: 'Oficina de correos',
+        library: 'Biblioteca', school: 'Escuela', university: 'Universidad',
+        hospital: 'Hospital', clinic: 'Clínica', doctors: 'Médico',
+        cinema: 'Cine', theatre: 'Teatro', museum: 'Museo',
+        gym: 'Gimnasio', swimming_pool: 'Piscina',
+        marketplace: 'Mercado', kindergarten: 'Guardería',
+      }
+
+      const typeName = amenityNames[type] || type.charAt(0).toUpperCase() + type.slice(1)
+      const name = tags.name || typeName
       const address = [
         tags['addr:street'],
         tags['addr:housenumber'],
         tags['addr:city'],
         tags['addr:postcode'],
-      ].filter(Boolean).join(', ') || display_name.split(',').slice(0, 2).join(',')
+      ].filter(Boolean).join(', ') || (displayName ? displayName.split(',').slice(0, 2).join(',') : '')
 
       const osmUrl = elLat && elLon
         ? `https://www.openstreetmap.org/?mlat=${elLat}&mlon=${elLon}#map=17/${elLat}/${elLon}`
         : `https://www.openstreetmap.org/search?query=${encodeURIComponent(name + ' ' + address)}`
 
-      // Teléfono de OSM
       const phone = tags.phone || tags['contact:phone'] || undefined
-
-      // Web de OSM
       const website = tags.website || tags['contact:website'] || undefined
-
-      // Horarios de OSM
-      let hours: string | undefined
-      if (tags.opening_hours) {
-        hours = tags.opening_hours
-      }
+      const hours = tags.opening_hours || undefined
 
       return {
         name,
         address,
         rating: 0,
         totalReviews: 0,
-        types: [type.charAt(0).toUpperCase() + type.slice(1)],
+        types: [typeName],
         url: osmUrl,
         source: 'openstreetmap',
         phone,
@@ -393,7 +421,8 @@ async function searchOverpass(query: string): Promise<BusinessResult[]> {
         hours,
       } as BusinessResult
     })
-  } catch {
+  } catch (err) {
+    console.warn('Overpass search failed:', err)
     return []
   }
 }

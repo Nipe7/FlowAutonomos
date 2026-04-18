@@ -49,6 +49,32 @@ export default function AIAnalyzer() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const compressImage = (base64: string, maxSize: number = 800): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let w = img.width
+        let h = img.height
+        if (w > maxSize || h > maxSize) {
+          if (w > h) { h = (h / w) * maxSize; w = maxSize }
+          else { w = (w / h) * maxSize; h = maxSize }
+        }
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h)
+          resolve(canvas.toDataURL('image/jpeg', 0.7))
+        } else {
+          resolve(base64)
+        }
+      }
+      img.onerror = () => resolve(base64)
+      img.src = base64
+    })
+  }
+
   const handleAnalyze = async () => {
     if (!postText.trim() && !imageBase64) return
 
@@ -60,29 +86,56 @@ export default function AIAnalyzer() {
         text: postText.trim(),
         platform: selectedPlatform,
       }
-      if (imageBase64) body.image = imageBase64
 
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
+      // Comprimir imagen antes de enviar para no exceder límites
+      if (imageBase64) {
+        body.image = await compressImage(imageBase64, 800)
+      }
 
-      if (data.error) {
-        setResult({
-          summary: 'Error en el análisis',
-          keyPoints: [data.error],
-          recommendations: ['Inténtalo de nuevo con contenido diferente.'],
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000)
+
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
         })
-      } else {
-        setResult(data)
+        clearTimeout(timeoutId)
+
+        const data = await res.json()
+
+        if (data.error) {
+          setResult({
+            summary: 'Error en el análisis',
+            keyPoints: [data.error],
+            recommendations: ['Inténtalo de nuevo con contenido diferente.'],
+          })
+        } else {
+          setResult(data)
+        }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        if (fetchError.name === 'AbortError') {
+          setResult({
+            summary: 'La petición tardó demasiado',
+            keyPoints: ['El servidor no respondió a tiempo.'],
+            recommendations: ['Prueba con un texto más corto o sin imagen.'],
+          })
+        } else {
+          setResult({
+            summary: 'Error de conexión',
+            keyPoints: ['No se pudo conectar con el servidor: ' + (fetchError.message || 'Error desconocido')],
+            recommendations: ['Recarga la página e inténtalo de nuevo.'],
+          })
+        }
       }
     } catch {
       setResult({
-        summary: 'Error de conexión',
-        keyPoints: ['No se pudo conectar con el servidor.'],
-        recommendations: ['Verifica tu conexión e inténtalo de nuevo.'],
+        summary: 'Error inesperado',
+        keyPoints: ['Ocurrió un error al preparar el análisis.'],
+        recommendations: ['Recarga la página e inténtalo de nuevo.'],
       })
     } finally {
       setLoading(false)

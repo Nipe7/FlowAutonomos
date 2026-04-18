@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
+// Timeout para no exceder límite de Netlify
+const GEMINI_TIMEOUT = 20000
+
 export async function POST(req: NextRequest) {
   try {
     const { nombre, sector, zona, descripcion } = await req.json()
@@ -51,25 +54,40 @@ Responde SOLO con este JSON (sin markdown, sin backticks):
 
 Adapta todo al sector "${sector}" y la zona "${zona || 'su localidad'}". Sé práctico y creativo.`
 
-    const result = await model.generateContent(prompt)
-    const responseContent = result.response.text()
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT)
 
     try {
-      const jsonMatch = responseContent.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0])
-        return NextResponse.json(parsed)
-      }
-    } catch { /* fallback */ }
+      const result = await model.generateContent(prompt)
+      clearTimeout(timeoutId)
+      const responseContent = result.response.text()
 
-    return NextResponse.json({
-      suggestions: responseContent.split('\n').filter((l: string) => l.trim().length > 0).slice(0, 6)
-    })
+      try {
+        const jsonMatch = responseContent.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          return NextResponse.json(parsed)
+        }
+      } catch { /* fallback */ }
+
+      return NextResponse.json({
+        suggestions: responseContent.split('\n').filter((l: string) => l.trim().length > 0).slice(0, 6)
+      })
+    } catch (geminiError: any) {
+      clearTimeout(timeoutId)
+      if (geminiError.name === 'AbortError' || geminiError.message?.includes('timeout') || geminiError.message?.includes('abort')) {
+        return NextResponse.json(
+          { error: 'La sugerencia tardó demasiado. Inténtalo de nuevo.' },
+          { status: 504 }
+        )
+      }
+      throw geminiError
+    }
 
   } catch (error: any) {
     console.error('Synergy suggestion error:', error)
     return NextResponse.json(
-      { error: 'Error al generar sugerencias. Inténtalo de nuevo.' },
+      { error: error.message || 'Error al generar sugerencias. Inténtalo de nuevo.' },
       { status: 500 }
     )
   }

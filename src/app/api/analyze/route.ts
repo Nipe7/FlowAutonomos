@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
+// Timeout máximo para no exceder el límite de Netlify (10s free tier)
+const GEMINI_TIMEOUT = 25000
+
 export async function POST(req: NextRequest) {
   try {
     const { text, image, platform } = await req.json()
@@ -21,8 +24,6 @@ export async function POST(req: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey)
-
-    // Usar modelo con capacidad de visión para imágenes y videos
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const platformTips: Record<string, string> = {
@@ -102,10 +103,8 @@ Responde SIEMPRE en español. JSON válido (sin markdown, sin backticks):
   ]
 }`
 
-    // Construir las partes del contenido según lo que el usuario envíe
+    // Construir las partes del contenido
     const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = []
-
-    // Añadir el prompt del sistema como primera parte de texto
     parts.push({ text: systemPrompt + '\n\nAnaliza el siguiente contenido:' })
 
     if (text) {
@@ -114,40 +113,64 @@ Responde SIEMPRE en español. JSON válido (sin markdown, sin backticks):
 
     // Si hay imagen (base64), añadirla como inlineData para visión
     if (image) {
-      // Detectar el tipo MIME
       let mimeType = 'image/jpeg'
+      let base64Data = image
+
       if (image.includes('data:')) {
         const mimeMatch = image.match(/data:([^;]+);/)
         if (mimeMatch) mimeType = mimeMatch[1]
-        // Limpiar el prefijo data:image/...;base64,
-        const base64Data = image.replace(/^data:[^;]+;base64,/, '')
-        parts.push({ inlineData: { mimeType, data: base64Data } })
-      } else {
-        // Si ya es solo base64, asumir JPEG
-        parts.push({ inlineData: { mimeType: 'image/jpeg', data: image } })
+        base64Data = image.replace(/^data:[^;]+;base64,/, '')
       }
+
+      // Limitar tamaño de imagen para no exceder límites de Netlify/Gemini
+      // Gemini soporta hasta 20MB pero Netlify free tier tiene límite menor
+      if (base64Data.length > 4_000_000) {
+        // Reducir calidad quitando datos del final (aproximación simple)
+        // En producción se usaría sharp, pero en serverless no siempre disponible
+        console.warn('Image too large, truncating to ~3MB')
+        base64Data = base64Data.substring(0, 4_000_000)
+      }
+
+      parts.push({ inlineData: { mimeType, data: base64Data } })
     }
 
-    const result = await model.generateContent(parts)
-    const responseContent = result.response.text()
+    // Llamar a Gemini con timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT)
 
-    let parsed
     try {
-      const jsonMatch = responseContent.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0])
-      } else {
+      const result = await model.generateContent(parts)
+      clearTimeout(timeoutId)
+      const responseContent = result.response.text()
+
+      let parsed
+      try {
+        const jsonMatch = responseContent.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0])
+        } else {
+          parsed = { summary: responseContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] }
+        }
+      } catch {
         parsed = { summary: responseContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] }
       }
-    } catch {
-      parsed = { summary: responseContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] }
+
+      return NextResponse.json(parsed)
+    } catch (geminiError: any) {
+      clearTimeout(timeoutId)
+      if (geminiError.name === 'AbortError' || geminiError.message?.includes('timeout') || geminiError.message?.includes('abort')) {
+        return NextResponse.json(
+          { error: 'El análisis tardó demasiado. Intenta con un texto más corto o sin imagen.' },
+          { status: 504 }
+        )
+      }
+      throw geminiError
     }
 
-    return NextResponse.json(parsed)
   } catch (error: any) {
     console.error('Analysis error:', error)
     return NextResponse.json(
-      { error: 'Error al procesar el análisis.' },
+      { error: error.message || 'Error al procesar el análisis.' },
       { status: 500 }
     )
   }

@@ -73,7 +73,9 @@ export default function SinergiasSection() {
     setMode('results')
 
     try {
-      const res = await fetch('/api/search-business?' + new URLSearchParams({ q }))
+      const res = await fetch('/api/search-business?' + new URLSearchParams({ q }), {
+        signal: AbortSignal.timeout(20000),
+      })
       const data = await res.json()
       if (data.error) setError(data.error)
       else {
@@ -82,8 +84,12 @@ export default function SinergiasSection() {
         setRemainingSearches(data.remainingSearches ?? null)
         setFromCache(data.cached === true)
       }
-    } catch {
-      setError('Error al buscar. Inténtalo de nuevo.')
+    } catch (err: any) {
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        setError('La búsqueda tardó demasiado. Inténtalo de nuevo.')
+      } else {
+        setError('Error al buscar: ' + (err.message || 'Error de conexión'))
+      }
     } finally {
       setLoading(false)
     }
@@ -104,17 +110,22 @@ export default function SinergiasSection() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(recForm),
+        signal: AbortSignal.timeout(25000),
       })
       const data = await res.json()
       if (data.suggestions) {
         setAiSuggestions(data.suggestions)
+      } else if (data.error) {
+        setError(data.error)
       }
 
       // También buscar negocios reales del sector/zona
       const q = `${recForm.sector} ${recForm.zona}`.trim()
       if (q) {
         try {
-          const bizRes = await fetch('/api/search-business?' + new URLSearchParams({ q }))
+          const bizRes = await fetch('/api/search-business?' + new URLSearchParams({ q }), {
+            signal: AbortSignal.timeout(20000),
+          })
           const bizData = await bizRes.json()
           if (bizData.results) {
             setBusinessResults(bizData.results)
@@ -124,8 +135,12 @@ export default function SinergiasSection() {
           }
         } catch { /* no pasa nada */ }
       }
-    } catch {
-      setError('Error al generar recomendaciones. Inténtalo de nuevo.')
+    } catch (err: any) {
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        setError('La petición tardó demasiado. Inténtalo de nuevo.')
+      } else {
+        setError('Error al generar recomendaciones: ' + (err.message || 'Error de conexión'))
+      }
     } finally {
       setLoading(false)
     }
