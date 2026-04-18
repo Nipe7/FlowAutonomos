@@ -142,3 +142,23 @@ Stage Summary:
 - Imágenes se comprimen antes de enviar al servidor
 - Todas las llamadas tienen timeout para no colgar la UI
 
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix AI features - change from xAI to Groq API endpoints
+
+Work Log:
+- Identified root cause: API key `[REDACTED]` has `gsk_` prefix which belongs to Groq (groq.com), NOT xAI (console.x.ai)
+- Code was calling `https://api.x.ai/v1/chat/completions` with a Groq key - complete mismatch
+- Updated `/src/app/api/suggest-synergies/route.ts`: Changed endpoint to `https://api.groq.com/openai/v1/chat/completions`, model to `llama-3.3-70b-versatile`, timeout to 12s
+- Updated `/src/app/api/analyze/route.ts`: Same endpoint change, uses `llama-4-scout-17b-16e-instruct` for vision (images), `llama-3.3-70b-versatile` for text only
+- Added 401 error handling for invalid key detection
+- Committed and pushed to GitHub: `6c7fe36`
+- Local build passed successfully with no errors
+
+Stage Summary:
+- Both AI routes now point to Groq API which matches the user's API key format
+- The variable name `XAI_API_KEY` in Netlify env vars remains the same (no need to change it)
+- Netlify should auto-deploy from the push
+- User should test once Netlify build completes
