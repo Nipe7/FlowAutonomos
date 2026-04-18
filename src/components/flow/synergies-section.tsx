@@ -587,7 +587,7 @@ export default function SinergiasSection() {
               </button>
             </motion.div>
           )}
-        </div>
+        </motion.div>
       </div>
     </section>
   )
