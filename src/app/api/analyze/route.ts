@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import ZAI from 'z-ai-web-dev-sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +12,18 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const zai = await ZAI.create()
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Servicio de IA no configurado. Contacta con el administrador.' },
+        { status: 500 }
+      )
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey)
+
+    // Usar modelo con capacidad de visión para imágenes y videos
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const platformTips: Record<string, string> = {
       instagram: `INSTAGRAM:
@@ -64,69 +75,75 @@ export async function POST(req: NextRequest) {
       ? `\n\nCONTEXTO ESPECÍFICO PARA ${platform.toUpperCase()}:\n${platformTips[platform]}\n\nUsa estos datos para dar recomendaciones específicas.`
       : '\n\nNo se especificó plataforma. Da consejos generales para redes sociales.'
 
-    const messages: Array<{ role: string; content: Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
-      {
-        role: 'system',
-        content: [
-          {
-            type: 'text',
-            text: `Eres una experta en Social Media con más de 10 años gestionando cuentas de autónomos y pequeñas empresas en España. Te llamas "Analista Flow" y tu estilo es directo, profesional pero cercano.
+    const systemPrompt = `Eres una experta en Social Media con más de 10 años gestionando cuentas de autónomos y pequeñas empresas en España. Te llamas "Analista Flow" y tu estilo es directo, profesional pero cercano.
 
 Tu metodología de análisis cubre SIEMPRE estos puntos:
-1. 📏 LONGITUD - ¿Es la adecuada para la plataforma?
-2. 🎯 ENGAGEMENT POTENCIAL - ¿Generará interacción? ¿Por qué?
-3. 😊 EMOJIS - ¿Cantidad, tipo y colocación correctos?
-4. 📢 CTA (Call to Action) - ¿Es claro? ¿Está bien posicionado?
-5. 🎭 TONO EMOCIONAL - ¿Qué transmite? ¿Es coherente con el mensaje?
-6. ⚡ OPCIONES DE MEJORA - Cosas específicas que cambiaría YA
+1. LONGITUD - ¿Es la adecuada para la plataforma?
+2. ENGAGEMENT POTENCIAL - ¿Generará interacción? ¿Por qué?
+3. EMOJIS - ¿Cantidad, tipo y colocación correctos?
+4. CTA (Call to Action) - ¿Es claro? ¿Está bien posicionado?
+5. TONO EMOCIONAL - ¿Qué transmite? ¿Es coherente con el mensaje?
+6. OPCIONES DE MEJORA - Cosas específicas que cambiaría YA
 ${platformInfo}
 Responde SIEMPRE en español. JSON válido (sin markdown, sin backticks):
 {
   "summary": "Diagnóstico general del post en 2-3 frases claras.",
   "keyPoints": [
-    "📏 Longitud: [análisis concreto]",
-    "🎯 Engagement: [predicción y porqué]",
-    "😊 Emojis: [evaluación]",
-    "📢 CTA: [evaluación]",
-    "🎭 Tono emocional: [qué transmite]"
+    "Longitud: [análisis concreto]",
+    "Engagement: [predicción y porqué]",
+    "Emojis: [evaluación]",
+    "CTA: [evaluación]",
+    "Tono emocional: [qué transmite]"
   ],
   "recommendations": [
-    "💡 Cambio 1: [acción concreta]",
-    "💡 Cambio 2: [acción concreta]",
-    "💡 Cambio 3: [acción concreta]"
+    "Cambio 1: [acción concreta]",
+    "Cambio 2: [acción concreta]",
+    "Cambio 3: [acción concreta]"
   ]
 }`
-          }
-        ]
+
+    // Construir las partes del contenido según lo que el usuario envíe
+    const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = []
+
+    // Añadir el prompt del sistema como primera parte de texto
+    parts.push({ text: systemPrompt + '\n\nAnaliza el siguiente contenido:' })
+
+    if (text) {
+      parts.push({ text: `TEXTO DEL POST:\n${text}` })
+    }
+
+    // Si hay imagen (base64), añadirla como inlineData para visión
+    if (image) {
+      // Detectar el tipo MIME
+      let mimeType = 'image/jpeg'
+      if (image.includes('data:')) {
+        const mimeMatch = image.match(/data:([^;]+);/)
+        if (mimeMatch) mimeType = mimeMatch[1]
+        // Limpiar el prefijo data:image/...;base64,
+        const base64Data = image.replace(/^data:[^;]+;base64,/, '')
+        parts.push({ inlineData: { mimeType, data: base64Data } })
+      } else {
+        // Si ya es solo base64, asumir JPEG
+        parts.push({ inlineData: { mimeType: 'image/jpeg', data: image } })
       }
-    ]
+    }
 
-    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = []
-    if (text) userContent.push({ type: 'text', text })
-    if (image) userContent.push({ type: 'image_url', image_url: { url: image } })
-    messages.push({ role: 'user', content: userContent })
+    const result = await model.generateContent(parts)
+    const responseContent = result.response.text()
 
-    const completion = await zai.chat.completions.create({
-      messages: messages as any,
-      temperature: 0.7,
-      max_tokens: 1800,
-    })
-
-    const responseContent = completion.choices[0]?.message?.content || ''
-
-    let result
+    let parsed
     try {
       const jsonMatch = responseContent.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0])
+        parsed = JSON.parse(jsonMatch[0])
       } else {
-        result = { summary: responseContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] }
+        parsed = { summary: responseContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] }
       }
     } catch {
-      result = { summary: responseContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] }
+      parsed = { summary: responseContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] }
     }
 
-    return NextResponse.json(result)
+    return NextResponse.json(parsed)
   } catch (error: any) {
     console.error('Analysis error:', error)
     return NextResponse.json(

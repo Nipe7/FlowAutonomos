@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import ZAI from 'z-ai-web-dev-sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +12,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const zai = await ZAI.create()
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Servicio de IA no configurado. Contacta con el administrador.' },
+        { status: 500 }
+      )
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const prompt = `Eres un consultor experto en sinergias empresariales para autónomos y pequeños comercios en España.
 
@@ -42,22 +51,14 @@ Responde SOLO con este JSON (sin markdown, sin backticks):
 
 Adapta todo al sector "${sector}" y la zona "${zona || 'su localidad'}". Sé práctico y creativo.`
 
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'system', content: 'Eres un consultor de sinergias empresariales. Responde SOLO con JSON válido, sin markdown ni backticks.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.8,
-      max_tokens: 1500,
-    })
-
-    const responseContent = completion.choices[0]?.message?.content || ''
+    const result = await model.generateContent(prompt)
+    const responseContent = result.response.text()
 
     try {
       const jsonMatch = responseContent.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
-        const result = JSON.parse(jsonMatch[0])
-        return NextResponse.json(result)
+        const parsed = JSON.parse(jsonMatch[0])
+        return NextResponse.json(parsed)
       }
     } catch { /* fallback */ }
 
