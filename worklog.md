@@ -98,3 +98,26 @@ Stage Summary:
 - Much faster page load: no video buffering or network requests
 - Cinematic feel preserved via Ken Burns + parallax + particle effects
 - Each panel has unique micro-animation matching its trade (wood dust, steam, clay spin, water shimmer)
+---
+Task ID: 1
+Agent: main
+Task: Diagnosticar y reparar FlowAutónomos para que funcione en Netlify
+
+Work Log:
+- Leí todos los archivos del proyecto para diagnóstico completo
+- ENCONTRADO: build script en package.json tenía "cp -r .next/static .next/standalone/.next/" pero next.config NO tiene output:standalone → build fallaba en Netlify → NADA se desplegaba bien
+- ENCONTRADO: solo existía bun.lock, Netlify usa npm → necesitaba package-lock.json
+- ENCONTRADO: z-ai-web-dev-sdk NO funciona en Netlify serverless → reemplazado por Google Gemini API
+- Corregido package.json build script: "next build" (sin copias a standalone)
+- Generado package-lock.json con npm
+- Instalado @google/generative-ai como dependencia
+- Reescrito suggest-synergies/route.ts para usar Gemini 2.0 Flash
+- Reescrito analyze/route.ts para usar Gemini 2.0 Flash con visión (inlineData para imágenes base64)
+- Commit y push a GitHub exitoso: c554460
+
+Stage Summary:
+- 3 bugs críticos corregidos: build roto, falta package-lock, SDK incompatible
+- 2 API routes reescritas para Google Gemini
+- Pendiente: usuario debe añadir GEMINI_API_KEY en Netlify UI
+- Push exitoso a Nipe7/FlowAutonomos.git → Netlify debe auto-desplegar
+
