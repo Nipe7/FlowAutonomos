@@ -106,11 +106,12 @@ export default function AIAnalyzer() {
 
         const data = await res.json()
 
-        if (data.error) {
+        if (data.errorFriendly || data.error) {
+          const msg = data.errorFriendly || data.error
           setResult({
-            summary: 'Error en el análisis',
-            keyPoints: [data.error],
-            recommendations: ['Inténtalo de nuevo con contenido diferente.'],
+            summary: 'No se pudo analizar el contenido',
+            keyPoints: [msg],
+            recommendations: ['Inténtalo de nuevo en unos minutos.'],
           })
         } else {
           setResult(data)

@@ -158,20 +158,27 @@ Responde SIEMPRE en español. JSON válido (sin markdown, sin backticks):
       return NextResponse.json(parsed)
     } catch (geminiError: any) {
       clearTimeout(timeoutId)
-      if (geminiError.name === 'AbortError' || geminiError.message?.includes('timeout') || geminiError.message?.includes('abort')) {
-        return NextResponse.json(
-          { error: 'El análisis tardó demasiado. Intenta con un texto más corto o sin imagen.' },
-          { status: 504 }
-        )
+      console.error('Analysis error:', geminiError)
+      const msg = geminiError?.message || ''
+      if (msg.includes('429') || msg.includes('quota') || msg.includes('exceeded') || msg.includes('Too Many')) {
+        return NextResponse.json({
+          errorFriendly: 'La IA ha alcanzado su límite de uso. Prueba de nuevo en unas horas o envíame el texto sin imagen.',
+        })
       }
-      throw geminiError
+      if (geminiError.name === 'AbortError' || msg.includes('timeout') || msg.includes('abort')) {
+        return NextResponse.json({
+          errorFriendly: 'El análisis tardó demasiado. Intenta con un texto más corto o sin imagen.',
+        })
+      }
+      return NextResponse.json({
+        errorFriendly: 'No se pudo completar el análisis en este momento. Inténtalo de nuevo.',
+      })
     }
 
   } catch (error: any) {
     console.error('Analysis error:', error)
-    return NextResponse.json(
-      { error: error.message || 'Error al procesar el análisis.' },
-      { status: 500 }
-    )
+    return NextResponse.json({
+      errorFriendly: 'No se pudo completar el análisis en este momento. Inténtalo de nuevo.',
+    })
   }
 }
