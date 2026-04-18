@@ -1,83 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const XAI_API_URL = 'https://api.x.ai/v1/chat/completions'
-const XAI_TIMEOUT = 20000
-
-// ============================================================
-// Errores técnicos → mensajes amigables
-// ============================================================
-function friendlyError(error: any): string {
-  const msg = error?.message || String(error) || ''
-  if (msg.includes('429') || msg.includes('quota') || msg.includes('rate') || msg.includes('Too Many')) {
-    return 'La IA ha alcanzado su límite de uso. Prueba de nuevo en unos minutos o usa la búsqueda directa.'
-  }
-  if (msg.includes('401') || msg.includes('API key') || msg.includes('UNAUTHORIZED') || msg.includes('invalid')) {
-    return 'El servicio de IA no está disponible en este momento.'
-  }
-  if (msg.includes('timeout') || msg.includes('abort') || msg.includes('TIMEOUT')) {
-    return 'La IA tardó demasiado en responder. Prueba de nuevo.'
-  }
-  if (msg.includes('fetch') || msg.includes('network') || msg.includes('ECONN')) {
-    return 'No se pudo conectar con el servicio de IA. Verifica tu conexión.'
-  }
-  return 'No se pudieron generar sugerencias en este momento. Inténtalo de nuevo.'
-}
 
 export async function POST(req: NextRequest) {
   try {
     const { nombre, sector, zona, descripcion } = await req.json()
 
     if (!sector) {
-      return NextResponse.json(
-        { error: 'Por favor, indica tu sector.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Por favor, indica tu sector.' }, { status: 400 })
     }
 
     const apiKey = process.env.XAI_API_KEY
     if (!apiKey) {
       return NextResponse.json({
-        errorFriendly: 'El servicio de IA no está disponible en este momento. Prueba más tarde.',
+        errorFriendly: 'La IA no está configurada todavía. Vuelve a intentarlo más tarde.',
         suggestions: null,
       })
     }
 
-    const prompt = `Eres un consultor experto en sinergias empresariales para autónomos y pequeños comercios en España.
+    const prompt = `Eres consultor de sinergias para autónomos en España.
+Negocio: ${nombre || '-'} | Sector: ${sector} | Zona: ${zona || '-'}
 
-Datos del negocio del usuario:
-- Nombre: ${nombre || 'No indicado'}
-- Sector: ${sector}
-- Zona: ${zona || 'No indicada'}
-- Descripción: ${descripcion || 'No indicada'}
+Sugiere 3 sinergias CONVENCIONALES y 3 DISRUPTIVAS.
+Para cada una indica:
+- "type": "convencional" o "disruptiva"
+- "businessType": tipo de negocio en 1-2 palabras (ej: "floristería", "gimnasio")
+- "text": descripción concreta de la acción conjunta
 
-Tu tarea es sugerir con qué tipos de negocios podría aliarse este autónomo. Debes dar:
-- 3 sinergias CONVENCIONALES (colaboraciones naturales con negocios complementarios que estén cerca)
-- 3 sinergias DISRUPTIVAS (alianzas creativas e inesperadas con negocios de otros sectores)
-
-Para cada sugerencia:
-- Indica el TIPO de negocio (en 1-2 palabras, sin artículo) en el campo "businessType"
-- Describe QUÉ harían juntos de forma concreta en el campo "text"
-
-IMPORTANTE para "businessType": usa solo el tipo de negocio que se buscaría en Google Maps.
-Ejemplos correctos: "floristería", "cafetería", "gimnasio", "fotógrafo", "tienda de ropa", "peluquería"
-Ejemplos incorrectos: "una floristería", "los cafés de la zona"
-
-Responde SOLO con este JSON (sin markdown, sin backticks):
-{
-  "suggestions": [
-    { "type": "convencional", "businessType": "tipo_de_negocio_1", "text": "Descripción concreta de la acción conjunta." },
-    { "type": "convencional", "businessType": "tipo_de_negocio_2", "text": "..." },
-    { "type": "convencional", "businessType": "tipo_de_negocio_3", "text": "..." },
-    { "type": "disruptiva", "businessType": "tipo_de_negocio_4", "text": "Descripción concreta e inesperada." },
-    { "type": "disruptiva", "businessType": "tipo_de_negocio_5", "text": "..." },
-    { "type": "disruptiva", "businessType": "tipo_de_negocio_6", "text": "..." }
-  ]
-}
-
-Adapta todo al sector "${sector}" y la zona "${zona || 'su localidad'}". Sé práctico y creativo.`
+JSON sin markdown ni backticks:
+{"suggestions":[{"type":"convencional","businessType":"...","text":"..."}, ...]}`
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), XAI_TIMEOUT)
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
 
     try {
       const response = await fetch(XAI_API_URL, {
@@ -89,11 +43,11 @@ Adapta todo al sector "${sector}" y la zona "${zona || 'su localidad'}". Sé pr�
         body: JSON.stringify({
           model: 'grok-3-mini',
           messages: [
-            { role: 'system', content: 'Eres un consultor de sinergias empresariales. Responde SOLO con JSON válido, sin markdown ni backticks.' },
+            { role: 'system', content: 'Responde SOLO con JSON válido, sin markdown ni backticks.' },
             { role: 'user', content: prompt },
           ],
           temperature: 0.8,
-          max_tokens: 1500,
+          max_tokens: 800,
         }),
         signal: controller.signal,
       })
@@ -101,27 +55,25 @@ Adapta todo al sector "${sector}" y la zona "${zona || 'su localidad'}". Sé pr�
 
       if (!response.ok) {
         const errBody = await response.text()
-        console.error('xAI API error:', response.status, errBody)
-        return NextResponse.json({
-          errorFriendly: friendlyError({ message: errBody }),
-          suggestions: null,
-        })
+        console.error('xAI error:', response.status, errBody)
+        if (errBody.includes('429') || errBody.includes('rate') || errBody.includes('quota')) {
+          return NextResponse.json({ errorFriendly: 'La IA ha alcanzado su límite de uso. Prueba en unos minutos.', suggestions: null })
+        }
+        return NextResponse.json({ errorFriendly: 'La IA no está disponible ahora. Prueba de nuevo.', suggestions: null })
       }
 
       const data = await response.json()
-      const responseContent = data.choices?.[0]?.message?.content || ''
+      const content = data.choices?.[0]?.message?.content || ''
 
       try {
-        const jsonMatch = responseContent.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0])
-          if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-            return NextResponse.json({ suggestions: parsed.suggestions })
-          }
+        const match = content.match(/\{[\s\S]*\}/)
+        if (match) {
+          const parsed = JSON.parse(match[0])
+          if (parsed.suggestions) return NextResponse.json({ suggestions: parsed.suggestions })
         }
       } catch { /* fallback */ }
 
-      const lines = responseContent.split('\n').filter((l: string) => l.trim().length > 0).slice(0, 6)
+      const lines = content.split('\n').filter((l: string) => l.trim().length > 0).slice(0, 6)
       return NextResponse.json({
         suggestions: lines.map((line: string, i: number) => ({
           type: i < 3 ? 'convencional' : 'disruptiva',
@@ -129,20 +81,11 @@ Adapta todo al sector "${sector}" y la zona "${zona || 'su localidad'}". Sé pr�
           text: line.replace(/^[-*\d.)\s]+/, '').trim(),
         }))
       })
-
-    } catch (fetchError: any) {
+    } catch (err: any) {
       clearTimeout(timeoutId)
-      return NextResponse.json({
-        errorFriendly: friendlyError(fetchError),
-        suggestions: null,
-      })
+      return NextResponse.json({ errorFriendly: 'La IA tardó demasiado. Prueba de nuevo.', suggestions: null })
     }
-
-  } catch (error: any) {
-    console.error('Synergy error:', error)
-    return NextResponse.json({
-      errorFriendly: 'Ha ocurrido un error inesperado. Inténtalo de nuevo.',
-      suggestions: null,
-    })
+  } catch {
+    return NextResponse.json({ errorFriendly: 'Error inesperado. Prueba de nuevo.', suggestions: null })
   }
 }
