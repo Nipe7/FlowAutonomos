@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 
-// Timeout máximo para no exceder el límite de Netlify (10s free tier)
-const GEMINI_TIMEOUT = 25000
+const XAI_API_URL = 'https://api.x.ai/v1/chat/completions'
+const XAI_TIMEOUT = 25000
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,16 +14,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const apiKey = process.env.GEMINI_API_KEY
+    const apiKey = process.env.XAI_API_KEY
     if (!apiKey) {
-      return NextResponse.json(
-        { error: 'Servicio de IA no configurado. Contacta con el administrador.' },
-        { status: 500 }
-      )
+      return NextResponse.json({
+        errorFriendly: 'El servicio de IA no está disponible en este momento.',
+      })
     }
-
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const platformTips: Record<string, string> = {
       instagram: `INSTAGRAM:
@@ -103,45 +98,56 @@ Responde SIEMPRE en español. JSON válido (sin markdown, sin backticks):
   ]
 }`
 
-    // Construir las partes del contenido
-    const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = []
-    parts.push({ text: systemPrompt + '\n\nAnaliza el siguiente contenido:' })
+    // Construir contenido del usuario (texto + posible imagen)
+    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = []
 
     if (text) {
-      parts.push({ text: `TEXTO DEL POST:\n${text}` })
+      userContent.push({ type: 'text', text: `Analiza el siguiente contenido:\n\nTEXTO DEL POST:\n${text}` })
+    } else {
+      userContent.push({ type: 'text', text: 'Analiza el siguiente contenido:' })
     }
 
-    // Si hay imagen (base64), añadirla como inlineData para visión
     if (image) {
-      let mimeType = 'image/jpeg'
-      let base64Data = image
-
-      if (image.includes('data:')) {
-        const mimeMatch = image.match(/data:([^;]+);/)
-        if (mimeMatch) mimeType = mimeMatch[1]
-        base64Data = image.replace(/^data:[^;]+;base64,/, '')
-      }
-
-      // Limitar tamaño de imagen para no exceder límites de Netlify/Gemini
-      // Gemini soporta hasta 20MB pero Netlify free tier tiene límite menor
-      if (base64Data.length > 4_000_000) {
-        // Reducir calidad quitando datos del final (aproximación simple)
-        // En producción se usaría sharp, pero en serverless no siempre disponible
-        console.warn('Image too large, truncating to ~3MB')
-        base64Data = base64Data.substring(0, 4_000_000)
-      }
-
-      parts.push({ inlineData: { mimeType, data: base64Data } })
+      // Asegurarse de que el base64 tiene el formato correcto
+      const imageUrl = image.includes('data:') ? image : `data:image/jpeg;base64,${image}`
+      userContent.push({ type: 'image_url', image_url: { url: imageUrl } })
     }
 
-    // Llamar a Gemini con timeout
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT)
+    const timeoutId = setTimeout(() => controller.abort(), XAI_TIMEOUT)
 
     try {
-      const result = await model.generateContent(parts)
+      const response = await fetch(XAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'grok-3-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userContent },
+          ],
+          temperature: 0.7,
+          max_tokens: 1800,
+        }),
+        signal: controller.signal,
+      })
       clearTimeout(timeoutId)
-      const responseContent = result.response.text()
+
+      if (!response.ok) {
+        const errBody = await response.text()
+        console.error('xAI API error:', response.status, errBody)
+        const msg = errBody || ''
+        if (msg.includes('429') || msg.includes('quota') || msg.includes('rate') || msg.includes('Too Many')) {
+          return NextResponse.json({ errorFriendly: 'La IA ha alcanzado su límite de uso. Prueba de nuevo en unos minutos.' })
+        }
+        return NextResponse.json({ errorFriendly: 'No se pudo completar el análisis. Inténtalo de nuevo.' })
+      }
+
+      const data = await response.json()
+      const responseContent = data.choices?.[0]?.message?.content || ''
 
       let parsed
       try {
@@ -156,29 +162,18 @@ Responde SIEMPRE en español. JSON válido (sin markdown, sin backticks):
       }
 
       return NextResponse.json(parsed)
-    } catch (geminiError: any) {
+
+    } catch (fetchError: any) {
       clearTimeout(timeoutId)
-      console.error('Analysis error:', geminiError)
-      const msg = geminiError?.message || ''
-      if (msg.includes('429') || msg.includes('quota') || msg.includes('exceeded') || msg.includes('Too Many')) {
-        return NextResponse.json({
-          errorFriendly: 'La IA ha alcanzado su límite de uso. Prueba de nuevo en unas horas o envíame el texto sin imagen.',
-        })
+      console.error('Analysis error:', fetchError)
+      if (fetchError.name === 'AbortError' || fetchError.message?.includes('timeout') || fetchError.message?.includes('abort')) {
+        return NextResponse.json({ errorFriendly: 'El análisis tardó demasiado. Intenta con un texto más corto o sin imagen.' })
       }
-      if (geminiError.name === 'AbortError' || msg.includes('timeout') || msg.includes('abort')) {
-        return NextResponse.json({
-          errorFriendly: 'El análisis tardó demasiado. Intenta con un texto más corto o sin imagen.',
-        })
-      }
-      return NextResponse.json({
-        errorFriendly: 'No se pudo completar el análisis en este momento. Inténtalo de nuevo.',
-      })
+      return NextResponse.json({ errorFriendly: 'No se pudo completar el análisis. Inténtalo de nuevo.' })
     }
 
   } catch (error: any) {
     console.error('Analysis error:', error)
-    return NextResponse.json({
-      errorFriendly: 'No se pudo completar el análisis en este momento. Inténtalo de nuevo.',
-    })
+    return NextResponse.json({ errorFriendly: 'No se pudo completar el análisis en este momento.' })
   }
 }

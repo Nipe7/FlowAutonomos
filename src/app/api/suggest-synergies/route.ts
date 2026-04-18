@@ -1,27 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const GEMINI_TIMEOUT = 20000
+const XAI_API_URL = 'https://api.x.ai/v1/chat/completions'
+const XAI_TIMEOUT = 20000
 
 // ============================================================
-// Convierte errores técnicos en mensajes amigables para el usuario
+// Errores técnicos → mensajes amigables
 // ============================================================
 function friendlyError(error: any): string {
   const msg = error?.message || String(error) || ''
-
-  if (msg.includes('429') || msg.includes('quota') || msg.includes('Too Many Requests') || msg.includes('exceeded')) {
-    return 'IA_AGOTADA'
+  if (msg.includes('429') || msg.includes('quota') || msg.includes('rate') || msg.includes('Too Many')) {
+    return 'La IA ha alcanzado su límite de uso. Prueba de nuevo en unos minutos o usa la búsqueda directa.'
   }
-  if (msg.includes('API key') || msg.includes('API_KEY') || msg.includes('invalid') || msg.includes('UNAUTHENTICATED')) {
-    return 'IA_CONFIGURACION'
+  if (msg.includes('401') || msg.includes('API key') || msg.includes('UNAUTHORIZED') || msg.includes('invalid')) {
+    return 'El servicio de IA no está disponible en este momento.'
   }
   if (msg.includes('timeout') || msg.includes('abort') || msg.includes('TIMEOUT')) {
-    return 'IA_TIMEOUT'
+    return 'La IA tardó demasiado en responder. Prueba de nuevo.'
   }
-  if (msg.includes('fetch') || msg.includes('network') || msg.includes('ECONNREFUSED')) {
-    return 'IA_CONEXION'
+  if (msg.includes('fetch') || msg.includes('network') || msg.includes('ECONN')) {
+    return 'No se pudo conectar con el servicio de IA. Verifica tu conexión.'
   }
-  return 'IA_ERROR'
+  return 'No se pudieron generar sugerencias en este momento. Inténtalo de nuevo.'
 }
 
 export async function POST(req: NextRequest) {
@@ -35,16 +34,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const apiKey = process.env.GEMINI_API_KEY
+    const apiKey = process.env.XAI_API_KEY
     if (!apiKey) {
       return NextResponse.json({
         errorFriendly: 'El servicio de IA no está disponible en este momento. Prueba más tarde.',
         suggestions: null,
       })
     }
-
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const prompt = `Eres un consultor experto en sinergias empresariales para autónomos y pequeños comercios en España.
 
@@ -62,7 +58,7 @@ Para cada sugerencia:
 - Indica el TIPO de negocio (en 1-2 palabras, sin artículo) en el campo "businessType"
 - Describe QUÉ harían juntos de forma concreta en el campo "text"
 
-IMPORTANTE para el campo "businessType": usa solo el tipo de negocio que se buscaría en un directorio como Google Maps.
+IMPORTANTE para "businessType": usa solo el tipo de negocio que se buscaría en Google Maps.
 Ejemplos correctos: "floristería", "cafetería", "gimnasio", "fotógrafo", "tienda de ropa", "peluquería"
 Ejemplos incorrectos: "una floristería", "los cafés de la zona"
 
@@ -81,12 +77,39 @@ Responde SOLO con este JSON (sin markdown, sin backticks):
 Adapta todo al sector "${sector}" y la zona "${zona || 'su localidad'}". Sé práctico y creativo.`
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT)
+    const timeoutId = setTimeout(() => controller.abort(), XAI_TIMEOUT)
 
     try {
-      const result = await model.generateContent(prompt)
+      const response = await fetch(XAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'grok-3-mini',
+          messages: [
+            { role: 'system', content: 'Eres un consultor de sinergias empresariales. Responde SOLO con JSON válido, sin markdown ni backticks.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.8,
+          max_tokens: 1500,
+        }),
+        signal: controller.signal,
+      })
       clearTimeout(timeoutId)
-      const responseContent = result.response.text()
+
+      if (!response.ok) {
+        const errBody = await response.text()
+        console.error('xAI API error:', response.status, errBody)
+        return NextResponse.json({
+          errorFriendly: friendlyError({ message: errBody }),
+          suggestions: null,
+        })
+      }
+
+      const data = await response.json()
+      const responseContent = data.choices?.[0]?.message?.content || ''
 
       try {
         const jsonMatch = responseContent.match(/\{[\s\S]*\}/)
@@ -98,7 +121,6 @@ Adapta todo al sector "${sector}" y la zona "${zona || 'su localidad'}". Sé pr�
         }
       } catch { /* fallback */ }
 
-      // Fallback: intentar extraer algo útil del texto
       const lines = responseContent.split('\n').filter((l: string) => l.trim().length > 0).slice(0, 6)
       return NextResponse.json({
         suggestions: lines.map((line: string, i: number) => ({
@@ -108,23 +130,16 @@ Adapta todo al sector "${sector}" y la zona "${zona || 'su localidad'}". Sé pr�
         }))
       })
 
-    } catch (geminiError: any) {
+    } catch (fetchError: any) {
       clearTimeout(timeoutId)
-      const code = friendlyError(geminiError)
-      const messages: Record<string, string> = {
-        IA_AGOTADA: 'La IA ha alcanzado su límite diario de uso. Prueba de nuevo en unas horas o usa la búsqueda directa.',
-        IA_CONFIGURACION: 'El servicio de IA no está disponible. Prueba más tarde.',
-        IA_TIMEOUT: 'La IA tardó demasiado en responder. Prueba de nuevo.',
-        IA_CONEXION: 'No se pudo conectar con el servicio de IA. Verifica tu conexión.',
-        IA_ERROR: 'El servicio de IA no está disponible ahora. Prueba más tarde.',
-      }
       return NextResponse.json({
-        errorFriendly: messages[code] || messages.IA_ERROR,
+        errorFriendly: friendlyError(fetchError),
         suggestions: null,
       })
     }
 
   } catch (error: any) {
+    console.error('Synergy error:', error)
     return NextResponse.json({
       errorFriendly: 'Ha ocurrido un error inesperado. Inténtalo de nuevo.',
       suggestions: null,
