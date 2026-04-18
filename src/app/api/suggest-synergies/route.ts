@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const XAI_API_URL = 'https://api.x.ai/v1/chat/completions'
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,17 +31,17 @@ JSON sin markdown ni backticks:
 {"suggestions":[{"type":"convencional","businessType":"...","text":"..."}, ...]}`
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 8000)
+    const timeoutId = setTimeout(() => controller.abort(), 12000)
 
     try {
-      const response = await fetch(XAI_API_URL, {
+      const response = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'grok-3-mini',
+          model: 'llama-3.3-70b-versatile',
           messages: [
             { role: 'system', content: 'Responde SOLO con JSON válido, sin markdown ni backticks.' },
             { role: 'user', content: prompt },
@@ -55,8 +55,11 @@ JSON sin markdown ni backticks:
 
       if (!response.ok) {
         const errBody = await response.text()
-        console.error('xAI error:', response.status, errBody)
-        if (errBody.includes('429') || errBody.includes('rate') || errBody.includes('quota')) {
+        console.error('Groq error:', response.status, errBody)
+        if (response.status === 401) {
+          return NextResponse.json({ errorFriendly: 'La clave de IA no es válida. Contacta con soporte.', suggestions: null })
+        }
+        if (response.status === 429 || errBody.includes('rate') || errBody.includes('quota')) {
           return NextResponse.json({ errorFriendly: 'La IA ha alcanzado su límite de uso. Prueba en unos minutos.', suggestions: null })
         }
         return NextResponse.json({ errorFriendly: 'La IA no está disponible ahora. Prueba de nuevo.', suggestions: null })
