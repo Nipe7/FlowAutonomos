@@ -121,3 +121,24 @@ Stage Summary:
 - Pendiente: usuario debe añadir GEMINI_API_KEY en Netlify UI
 - Push exitoso a Nipe7/FlowAutonomos.git → Netlify debe auto-desplegar
 
+---
+Task ID: 2
+Agent: main
+Task: Mejorar robustez de APIs y frontend para Netlify
+
+Work Log:
+- Reescrito analyze/route.ts con timeout 25s para Gemini, truncar imágenes >4MB, errores detallados
+- Reescrito suggest-synergies/route.ts con timeout 20s, errores con mensaje real
+- Mejorado search-business/route.ts: Overpass amplio (5km, todos amenity, tourism, filtrar sin nombre), nombres legibles en español, doble intento Nominatim
+- Mejorado ai-analyzer.tsx: comprimir imagen a 800px JPEG 70%, timeout 30s en fetch, mostrar error real
+- Mejorado synergies-section.tsx: timeout 20-25s en fetch, mostrar error real del servidor
+- Verificado: no quedan referencias a z-ai-web-dev-sdk
+- Commit 2ee2159 y push exitoso
+
+Stage Summary:
+- 5 archivos mejorados con manejo robusto de errores
+- Frontend ahora muestra errores reales para diagnóstico
+- Overpass query más amplia: 5km, todos los amenity, filtrado de elementos sin nombre
+- Imágenes se comprimen antes de enviar al servidor
+- Todas las llamadas tienen timeout para no colgar la UI
+
