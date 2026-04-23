@@ -97,9 +97,19 @@ export default function SinergiasSection() {
     }
   }
 
-  // ====== RECOMMEND: IA sugiere + busca negocios de cada tipo ======
+  // Guardar la zona en un ref para usarla en searchForType sin depender del estado del form
+  const [savedZona, setSavedZona] = useState('')
+
+  // ====== RECOMMEND: IA sugiere ======
   const handleRecommend = async () => {
     if (!recForm.sector.trim()) return
+    if (!recForm.zona.trim()) {
+      setErrorFriendly('Por favor, indica tu zona o ciudad para poder buscar negocios cercanos.')
+      return
+    }
+
+    // Guardar la zona para búsquedas posteriores
+    setSavedZona(recForm.zona.trim())
 
     setLoading(true)
     setErrorFriendly('')
@@ -108,37 +118,24 @@ export default function SinergiasSection() {
     setView('results')
 
     try {
-      // 1. Pedir sugerencias a la IA
       const res = await fetch('/api/suggest-synergies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(recForm),
         signal: AbortSignal.timeout(25000),
       })
-      const data = await res.json()
+
+      const responseText = await res.text()
+      if (!responseText || responseText.trim().length === 0) {
+        setErrorFriendly('El servidor no respondió. Prueba de nuevo.')
+        return
+      }
+
+      const data = JSON.parse(responseText)
 
       if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
         setAiSuggestions(data.suggestions)
-
-        // 2. Buscar negocios reales del PRIMER tipo sugerido en la zona del usuario
-        const firstSuggestion = data.suggestions.find((s: Suggestion) => s.businessType && s.businessType.trim())
-        if (firstSuggestion && recForm.zona) {
-          const bizType = firstSuggestion.businessType.trim()
-          const q = `${bizType} en ${recForm.zona.trim()}`.trim()
-          setLoadingBusinesses(bizType)
-          try {
-            const bizRes = await fetch('/api/search-business?' + new URLSearchParams({ q }), {
-              signal: AbortSignal.timeout(15000),
-            })
-            const bizData = await bizRes.json()
-            if (bizData.results) {
-              setBusinessResults(bizData.results)
-              setDataSource(bizData.source || '')
-              setRemainingSearches(bizData.remainingSearches ?? null)
-            }
-          } catch { /* sin resultados no pasa nada */ }
-          setLoadingBusinesses(null)
-        }
+        // NO buscar automáticamente — el usuario elige qué tipo buscar
       } else if (data.errorFriendly) {
         setErrorFriendly(data.errorFriendly)
       } else {
@@ -153,9 +150,14 @@ export default function SinergiasSection() {
 
   // ====== Buscar negocios de una sugerencia concreta ======
   const searchForType = useCallback(async (businessType: string) => {
-    if (!businessType || !recForm.zona) return
-    const q = `${businessType} en ${recForm.zona.trim()}`.trim()
-    if (!q) return
+    if (!businessType) return
+    // Usar savedZona (zona guardada al pedir sugerencias) o recForm.zona
+    const zona = savedZona || recForm.zona.trim()
+    if (!zona) {
+      setErrorFriendly('No se indicó una zona. Vuelve atrás e indica tu ciudad.')
+      return
+    }
+    const q = `${businessType} en ${zona}`.trim()
 
     setLoadingBusinesses(businessType)
     setBusinessResults([])
@@ -166,19 +168,21 @@ export default function SinergiasSection() {
         signal: AbortSignal.timeout(15000),
       })
       const bizData = await bizRes.json()
-      if (bizData.results) {
+      if (bizData.results && bizData.results.length > 0) {
         setBusinessResults(bizData.results)
         setDataSource(bizData.source || '')
         setRemainingSearches(bizData.remainingSearches ?? null)
       } else {
         setBusinessResults([])
+        setErrorFriendly(`No se encontraron negocios de tipo "${businessType}" en ${zona}. Prueba con otro tipo.`)
       }
     } catch {
       setBusinessResults([])
+      setErrorFriendly('La búsqueda de negocios falló. Prueba de nuevo.')
     } finally {
       setLoadingBusinesses(null)
     }
-  }, [recForm.zona])
+  }, [savedZona, recForm.zona])
 
   const handleKeyDownSearch = (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleSearch() }
   const handleKeyDownRec = (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleRecommend() }
@@ -251,7 +255,7 @@ export default function SinergiasSection() {
                   </h3>
                 </div>
                 <p className="text-[#eaecee]/35 text-xs mb-3">
-                  Pincha en un tipo de negocio para buscar ejemplos reales en tu zona
+                  Pincha en el botón de cada sugerencia para buscar negocios reales en tu zona
                 </p>
                 <div className="space-y-2">
                   {aiSuggestions.map((sug, i) => (
@@ -259,10 +263,7 @@ export default function SinergiasSection() {
                       key={i}
                       className={`p-3.5 rounded-lg transition-all ${
                         sug.type === 'disruptiva' ? 'card-orange-soft' : 'card-green-soft'
-                      } ${sug.businessType ? 'cursor-pointer hover:scale-[1.01]' : ''}`}
-                      onClick={() => {
-                        if (sug.businessType) searchForType(sug.businessType)
-                      }}
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
@@ -278,21 +279,22 @@ export default function SinergiasSection() {
                               </span>
                             )}
                           </div>
-                          <p className="text-[#eaecee]/70 text-sm leading-relaxed">{sug.text}</p>
+                          <p className="text-[#eaecee]/70 text-sm leading-relaxed mb-2">{sug.text}</p>
+                          {sug.businessType && (
+                            <button
+                              onClick={() => searchForType(sug.businessType)}
+                              disabled={!!loadingBusinesses}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#44c478]/10 text-[#44c478] text-xs hover:bg-[#44c478]/20 disabled:opacity-40 transition-colors cursor-pointer"
+                              style={{ fontFamily: "'Oswald', sans-serif", letterSpacing: '0.5px', textTransform: 'uppercase' }}
+                            >
+                              {loadingBusinesses === sug.businessType ? (
+                                <><Loader2 className="w-3 h-3 animate-spin" /> Buscando...</>
+                              ) : (
+                                <><Search className="w-3 h-3" /> Buscar {sug.businessType} en {savedZona || recForm.zona || 'tu zona'}</>
+                              )}
+                            </button>
+                          )}
                         </div>
-                        {sug.businessType && (
-                          <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
-                            loadingBusinesses === sug.businessType
-                              ? 'bg-[#44c478]/20'
-                              : 'bg-[#44c478]/8'
-                          }`}>
-                            {loadingBusinesses === sug.businessType ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#44c478]" />
-                            ) : (
-                              <ArrowRight className="w-3.5 h-3.5 text-[#44c478]/60" />
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                   ))}

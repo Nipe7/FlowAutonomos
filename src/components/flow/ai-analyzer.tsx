@@ -104,7 +104,28 @@ export default function AIAnalyzer() {
         })
         clearTimeout(timeoutId)
 
-        const data = await res.json()
+        // Verificar que la respuesta tiene contenido antes de parsear
+        const responseText = await res.text()
+        if (!responseText || responseText.trim().length === 0) {
+          setResult({
+            summary: 'El servidor no respondió',
+            keyPoints: ['La IA tardó demasiado o hubo un problema interno.'],
+            recommendations: ['Espera unos segundos y vuelve a intentarlo.'],
+          })
+          return
+        }
+
+        let data: any
+        try {
+          data = JSON.parse(responseText)
+        } catch {
+          setResult({
+            summary: 'Error en la respuesta del servidor',
+            keyPoints: ['El servidor devolvió una respuesta inesperada.'],
+            recommendations: ['Recarga la página e inténtalo de nuevo.'],
+          })
+          return
+        }
 
         if (data.errorFriendly || data.error) {
           const msg = data.errorFriendly || data.error
@@ -127,7 +148,7 @@ export default function AIAnalyzer() {
         } else {
           setResult({
             summary: 'Error de conexión',
-            keyPoints: ['No se pudo conectar con el servidor: ' + (fetchError.message || 'Error desconocido')],
+            keyPoints: ['No se pudo conectar con el servidor.'],
             recommendations: ['Recarga la página e inténtalo de nuevo.'],
           })
         }

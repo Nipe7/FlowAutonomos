@@ -31,10 +31,13 @@ Analiza el post y devuelve SOLO este JSON sin markdown ni backticks:
       userContent.push({ type: 'image_url', image_url: { url: imageUrl } })
     }
 
+    // Timeout de 6s para dejar margen dentro del límite de 10s de Netlify
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 12000)
+    const timeoutId = setTimeout(() => controller.abort(), 6000)
 
     try {
+      const model = image ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile'
+
       const response = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: {
@@ -42,13 +45,13 @@ Analiza el post y devuelve SOLO este JSON sin markdown ni backticks:
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: image ? 'llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile',
+          model,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userContent },
           ],
           temperature: 0.7,
-          max_tokens: 600,
+          max_tokens: 500,
         }),
         signal: controller.signal,
       })
@@ -56,12 +59,50 @@ Analiza el post y devuelve SOLO este JSON sin markdown ni backticks:
 
       if (!response.ok) {
         const errBody = await response.text()
-        console.error('Groq error:', response.status, errBody)
+        console.error('Groq analyze error:', response.status, errBody)
         if (response.status === 401) {
           return NextResponse.json({ errorFriendly: 'La clave de IA no es válida. Contacta con soporte.' })
         }
         if (response.status === 429 || errBody.includes('rate') || errBody.includes('quota')) {
           return NextResponse.json({ errorFriendly: 'La IA ha alcanzado su límite de uso. Prueba en unos minutos.' })
+        }
+        // Si el modelo de visión falla, reintentar sin imagen
+        if (image && response.status !== 200) {
+          const retryController = new AbortController()
+          const retryTimeout = setTimeout(() => retryController.abort(), 6000)
+          try {
+            const retryResponse = await fetch(GROQ_API_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: `Analiza este post:\n${text || '(imagen adjunta que no se pudo procesar)'}` },
+                ],
+                temperature: 0.7,
+                max_tokens: 500,
+              }),
+              signal: retryController.signal,
+            })
+            clearTimeout(retryTimeout)
+            if (retryResponse.ok) {
+              const retryData = await retryResponse.json()
+              const retryContent = retryData.choices?.[0]?.message?.content || ''
+              let retryParsed
+              try {
+                const match = retryContent.match(/\{[\s\S]*\}/)
+                retryParsed = match ? JSON.parse(match[0]) : null
+              } catch { retryParsed = null }
+              if (retryParsed) return NextResponse.json(retryParsed)
+              return NextResponse.json({ summary: retryContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] })
+            }
+          } catch {
+            clearTimeout(retryTimeout)
+          }
         }
         return NextResponse.json({ errorFriendly: 'No se pudo analizar. Prueba de nuevo.' })
       }
@@ -82,9 +123,11 @@ Analiza el post y devuelve SOLO este JSON sin markdown ni backticks:
       return NextResponse.json(parsed)
     } catch (err: any) {
       clearTimeout(timeoutId)
+      console.error('Groq analyze timeout/error:', err.message)
       return NextResponse.json({ errorFriendly: 'El análisis tardó demasiado. Prueba sin imagen o con texto más corto.' })
     }
-  } catch {
+  } catch (err: any) {
+    console.error('Analyze route error:', err.message)
     return NextResponse.json({ errorFriendly: 'Error inesperado. Prueba de nuevo.' })
   }
 }

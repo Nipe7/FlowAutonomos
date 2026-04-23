@@ -31,7 +31,8 @@ JSON sin markdown ni backticks:
 {"suggestions":[{"type":"convencional","businessType":"...","text":"..."}, ...]}`
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 12000)
+    // Timeout de 6s para dejar margen dentro del límite de 10s de Netlify
+    const timeoutId = setTimeout(() => controller.abort(), 6000)
 
     try {
       const response = await fetch(GROQ_API_URL, {
