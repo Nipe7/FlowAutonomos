@@ -149,7 +149,7 @@ Agent: Main Agent
 Task: Fix AI features - change from xAI to Groq API endpoints
 
 Work Log:
-- Identified root cause: API key `[REDACTED]` has `gsk_` prefix which belongs to Groq (groq.com), NOT xAI (console.x.ai)
+- Identified root cause: API key has `gsk_` prefix which belongs to Groq (groq.com), NOT xAI (console.x.ai)
 - Code was calling `https://api.x.ai/v1/chat/completions` with a Groq key - complete mismatch
 - Updated `/src/app/api/suggest-synergies/route.ts`: Changed endpoint to `https://api.groq.com/openai/v1/chat/completions`, model to `llama-3.3-70b-versatile`, timeout to 12s
 - Updated `/src/app/api/analyze/route.ts`: Same endpoint change, uses `llama-4-scout-17b-16e-instruct` for vision (images), `llama-3.3-70b-versatile` for text only
