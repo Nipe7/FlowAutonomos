@@ -1,0 +1,1567 @@
+================================================================================
+  FLOWAUTÓNOMOS — CÓDIGO FUENTE COMPLETO
+  Proyecto: Plataforma de marketing para autónomos en España
+  Deploy: flowautnomos.netlify.app
+  GitHub: Nipe7/FlowAtonomos
+================================================================================
+
+IMPORTANTE PARA INTEGRACIÓN DE IA:
+  - Los archivos que usan IA son:
+    1. src/app/api/analyze/route.ts          → Analizador de posts (Groq API)
+    2. src/app/api/suggest-synergies/route.ts → Sugerencias de sinergias (Groq API)
+  - Ambos leen la variable de entorno: XAI_API_KEY
+  - La API de Groq usada: https://api.groq.com/openai/v1/chat/completions
+  - Modelos: llama-3.3-70b-versatile (texto), meta-llama/llama-4-scout-17b-16e-instruct (visión)
+  - Para cambiar de proveedor de IA, modificar las URLs y modelo en esos 2 archivos
+  - El buscador de negocios NO necesita IA (usa RapidAPI + OpenStreetMap/Overpass)
+
+================================================================================
+ARCHIVO 1: netlify.toml
+================================================================================
+[build]
+  command = "npm run build"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+================================================================================
+ARCHIVO 2: next.config.ts
+================================================================================
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* Netlify handles the output mode via @netlify/plugin-nextjs */
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  reactStrictMode: false,
+  images: {
+    unoptimized: true,
+  },
+  allowedDevOrigins: ['*'],
+};
+
+export default nextConfig;
+
+================================================================================
+ARCHIVO 3: package.json
+================================================================================
+{
+  "name": "nextjs_tailwind_shadcn_ts",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000 2>&1 | tee dev.log",
+    "build": "next build",
+    "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
+    "lint": "eslint .",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "prisma migrate reset"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@google/generative-ai": "^0.24.1",
+    "@hookform/resolvers": "^5.1.1",
+    "@mdxeditor/editor": "^3.39.1",
+    "@prisma/client": "^6.11.1",
+    "@radix-ui/react-accordion": "^1.2.11",
+    "@radix-ui/react-alert-dialog": "^1.1.14",
+    "@radix-ui/react-aspect-ratio": "^1.1.7",
+    "@radix-ui/react-avatar": "^1.1.10",
+    "@radix-ui/react-checkbox": "^1.3.2",
+    "@radix-ui/react-collapsible": "^1.1.11",
+    "@radix-ui/react-context-menu": "^2.2.15",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-hover-card": "^1.1.14",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-menubar": "^1.1.15",
+    "@radix-ui/react-navigation-menu": "^1.2.13",
+    "@radix-ui/react-popover": "^1.1.14",
+    "@radix-ui/react-progress": "^1.1.7",
+    "@radix-ui/react-radio-group": "^1.3.7",
+    "@radix-ui/react-scroll-area": "^1.2.9",
+    "@radix-ui/react-select": "^2.2.5",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slider": "^1.3.5",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.5",
+    "@radix-ui/react-tabs": "^1.1.12",
+    "@radix-ui/react-toast": "^1.2.14",
+    "@radix-ui/react-toggle": "^1.1.9",
+    "@radix-ui/react-toggle-group": "^1.1.10",
+    "@radix-ui/react-tooltip": "^1.2.7",
+    "@reactuses/core": "^6.0.5",
+    "@tanstack/react-query": "^5.82.0",
+    "@tanstack/react-table": "^8.21.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "date-fns": "^4.1.0",
+    "embla-carousel-react": "^8.6.0",
+    "framer-motion": "^12.23.2",
+    "input-otp": "^1.4.2",
+    "lucide-react": "^0.525.0",
+    "next": "^16.1.1",
+    "next-auth": "^4.24.11",
+    "next-intl": "^4.3.4",
+    "next-themes": "^0.4.6",
+    "prisma": "^6.11.1",
+    "react": "^19.0.0",
+    "react-day-picker": "^9.8.0",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.60.0",
+    "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^3.0.3",
+    "react-syntax-highlighter": "^15.6.1",
+    "recharts": "^2.15.4",
+    "sharp": "^0.34.3",
+    "sonner": "^2.0.6",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.1.0",
+    "vaul": "^1.1.2",
+    "z-ai-web-dev-sdk": "^0.0.17",
+    "zod": "^4.0.2",
+    "zustand": "^5.0.6"
+  },
+  "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.9",
+    "@tailwindcss/postcss": "^4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "bun-types": "^1.3.4",
+    "eslint": "^9",
+    "eslint-config-next": "^16.1.1",
+    "tailwindcss": "^4",
+    "tw-animate-css": "^1.3.5",
+    "typescript": "^5"
+  }
+}
+
+================================================================================
+ARCHIVO 4: tailwind.config.ts
+================================================================================
+import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
+
+const config: Config = {
+    darkMode: "class",
+    content: [
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+        extend: {
+                colors: {
+                        background: 'hsl(var(--background))',
+                        foreground: 'hsl(var(--foreground))',
+                        card: {
+                                DEFAULT: 'hsl(var(--card))',
+                                foreground: 'hsl(var(--card-foreground))'
+                        },
+                        popover: {
+                                DEFAULT: 'hsl(var(--popover))',
+                                foreground: 'hsl(var(--popover-foreground))'
+                        },
+                        primary: {
+                                DEFAULT: 'hsl(var(--primary))',
+                                foreground: 'hsl(var(--primary-foreground))'
+                        },
+                        secondary: {
+                                DEFAULT: 'hsl(var(--secondary))',
+                                foreground: 'hsl(var(--secondary-foreground))'
+                        },
+                        muted: {
+                                DEFAULT: 'hsl(var(--muted))',
+                                foreground: 'hsl(var(--muted-foreground))'
+                        },
+                        accent: {
+                                DEFAULT: 'hsl(var(--accent))',
+                                foreground: 'hsl(var(--accent-foreground))'
+                        },
+                        destructive: {
+                                DEFAULT: 'hsl(var(--destructive))',
+                                foreground: 'hsl(var(--destructive-foreground))'
+                        },
+                        border: 'hsl(var(--border))',
+                        input: 'hsl(var(--input))',
+                        ring: 'hsl(var(--ring))',
+                        chart: {
+                                '1': 'hsl(var(--chart-1))',
+                                '2': 'hsl(var(--chart-2))',
+                                '3': 'hsl(var(--chart-3))',
+                                '4': 'hsl(var(--chart-4))',
+                                '5': 'hsl(var(--chart-5))'
+                        }
+                },
+                borderRadius: {
+                        lg: 'var(--radius)',
+                        md: 'calc(var(--radius) - 2px)',
+                        sm: 'calc(var(--radius) - 4px)'
+                }
+        }
+  },
+  plugins: [tailwindcssAnimate],
+};
+export default config;
+
+================================================================================
+ARCHIVO 5: tsconfig.json
+================================================================================
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "noImplicitAny": false,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+
+
+================================================================================
+ARCHIVO 6: src/app/layout.tsx
+================================================================================
+import type { Metadata } from "next";
+import { Inter, Oswald } from "next/font/google";
+import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const oswald = Oswald({
+  variable: "--font-oswald",
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+});
+
+export const metadata: Metadata = {
+  title: "FlowAutónomos | Marketing consciente para autónomos",
+  description:
+    "Plataforma gratuita para autónomos y pequeños comercios con marketing consciente y low-cost. Recupera ventas, ilusión y autoestima. Herramientas, sinergias con IA y recursos gratuitos.",
+  keywords: [
+    "FlowAutónomos",
+    "marketing consciente",
+    "autónomos",
+    "herramientas gratis",
+    "marketing low-cost",
+    "sinergias IA",
+    "negocios locales",
+  ],
+  openGraph: {
+    title: "FlowAutónomos | Sube tu negocio sin bajar la moral",
+    description:
+      "Ideas gratis, reales y hechas para que el flow vuelva a tu negocio.",
+    type: "website",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="es" suppressHydrationWarning>
+      <body
+        className={`${inter.variable} ${oswald.variable} antialiased`}
+        style={{ backgroundColor: '#020202', color: '#eaecee' }}
+      >
+        {children}
+        <Toaster />
+      </body>
+    </html>
+  );
+}
+
+================================================================================
+ARCHIVO 7: src/app/page.tsx
+================================================================================
+'use client'
+
+import Navbar from '@/components/flow/navbar'
+import HeroSection from '@/components/flow/hero-section'
+import HowWeHelp from '@/components/flow/how-we-help'
+import IdeasRescate from '@/components/flow/ideas-rescate'
+import SinergiasSection from '@/components/flow/synergies-section'
+import AIAnalyzer from '@/components/flow/ai-analyzer'
+import EbookSection from '@/components/flow/ebook-section'
+import Footer from '@/components/flow/footer'
+
+export default function Home() {
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: '#020202' }}>
+      <Navbar />
+      <HeroSection />
+      <HowWeHelp />
+      <IdeasRescate />
+      <SinergiasSection />
+      <AIAnalyzer />
+      <EbookSection />
+      <Footer />
+    </div>
+  )
+}
+
+================================================================================
+ARCHIVO 8: src/app/globals.css
+================================================================================
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* FlowAutónomos Corporate Colors */
+  --color-flow-bg: #020202;
+  --color-flow-green: #44c478;
+  --color-flow-gray: #eaecee;
+  --color-flow-blue: #566c83;
+  --color-flow-orange: #FF6B35;
+  --color-flow-fucsia: #FF1493;
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: #020202;
+  --foreground: #eaecee;
+  --card: #0a0a0a;
+  --card-foreground: #eaecee;
+  --popover: #0a0a0a;
+  --popover-foreground: #eaecee;
+  --primary: #44c478;
+  --primary-foreground: #020202;
+  --secondary: #566c83;
+  --secondary-foreground: #eaecee;
+  --muted: #1a1a1a;
+  --muted-foreground: #8a9bb0;
+  --accent: #FF6B35;
+  --accent-foreground: #020202;
+  --destructive: #FF1493;
+  --border: rgba(68, 196, 120, 0.15);
+  --input: rgba(234, 236, 238, 0.1);
+  --ring: #44c478;
+  --chart-1: #44c478;
+  --chart-2: #566c83;
+  --chart-3: #FF6B35;
+  --chart-4: #FF1493;
+  --chart-5: #44c478;
+  --sidebar: #050505;
+  --sidebar-foreground: #eaecee;
+  --sidebar-primary: #44c478;
+  --sidebar-primary-foreground: #020202;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #eaecee;
+  --sidebar-border: rgba(68, 196, 120, 0.15);
+  --sidebar-ring: #44c478;
+  --green: #44c478;
+  --gray: #eaecee;
+  --blue: #566c83;
+  --orange: #FF6B35;
+  --fuchsia: #FF1493;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-flow-bg text-flow-gray; background-color: #020202; color: #eaecee; }
+  html { scroll-behavior: smooth; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes neonPulse {
+  0%, 100% { box-shadow: 0 0 3px currentColor, 0 0 6px currentColor; }
+  50% { box-shadow: 0 0 6px currentColor, 0 0 12px currentColor; }
+}
+@keyframes neonText {
+  0%, 100% { text-shadow: 0 0 4px #44c478, 0 0 9px rgba(68,196,120,.35); }
+  50% { text-shadow: 0 0 8px #44c478, 0 0 18px rgba(68,196,120,.45); }
+}
+@keyframes neonOrange {
+  0%, 100% { text-shadow: 0 0 4px #FF6B35, 0 0 8px rgba(255,107,53,.35); }
+  50% { text-shadow: 0 0 8px #FF6B35, 0 0 16px rgba(255,107,53,.45); }
+}
+@keyframes dot {
+  0%, 80%, 100% { transform: scale(0); opacity: .35; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.animate-fade-up { animation: fadeUp 0.85s ease-out both; }
+.animate-neon-pulse { animation: neonPulse 3.5s ease-in-out infinite; }
+.animate-neon-text { animation: neonText 2.5s ease-in-out infinite; }
+.animate-neon-orange { animation: neonOrange 2.5s ease-in-out infinite; }
+
+.divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(68,196,120,.16) 30%, rgba(68,196,120,.16) 70%, transparent);
+}
+.panel {
+  background: rgba(255,255,255,0.024);
+  border-left: 6px solid #FF1493;
+  border-radius: 0 10px 10px 0;
+  padding: 38px;
+}
+@media (max-width: 768px) { .panel { padding: 22px 17px; } }
+
+.tc-green { background: rgba(68,196,120,0.06); border: 1px solid rgba(68,196,120,0.14); border-radius: 8px; }
+.tc-green:hover { transform: translateY(-4px); box-shadow: 0 6px 24px rgba(68,196,120,0.15), 0 2px 8px rgba(68,196,120,0.08); }
+.tc-blue { background: rgba(86,108,131,0.06); border: 1px solid rgba(86,108,131,0.14); border-radius: 8px; }
+.tc-blue:hover { transform: translateY(-4px); box-shadow: 0 6px 24px rgba(86,108,131,0.15), 0 2px 8px rgba(86,108,131,0.08); }
+.tc-orange { background: rgba(255,107,53,0.06); border: 1px solid rgba(255,107,53,0.14); border-radius: 8px; }
+.tc-orange:hover { transform: translateY(-4px); box-shadow: 0 6px 24px rgba(255,107,53,0.15), 0 2px 8px rgba(255,107,53,0.08); }
+
+.hero-image-bg { position: absolute; inset: 0; overflow: hidden; z-index: 0; }
+.hero-image-bg img {
+  position: absolute; top: 50%; left: 50%; min-width: 100%; min-height: 100%;
+  width: auto; height: auto; transform: translate(-50%, -50%) scale(1.08);
+  filter: blur(3px) brightness(0.25) saturate(1.1); object-fit: cover;
+  animation: kenBurnsHero 35s ease-in-out infinite alternate;
+}
+@keyframes kenBurnsHero {
+  0% { transform: translate(-50%, -48%) scale(1.08); }
+  35% { transform: translate(-52%, -50%) scale(1.12); }
+  70% { transform: translate(-48%, -52%) scale(1.14); }
+  100% { transform: translate(-50%, -50%) scale(1.16); }
+}
+
+.hero-particles { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.sawdust-particle {
+  position: absolute; border-radius: 50%;
+  background: radial-gradient(circle, rgba(210,170,110,0.6) 0%, rgba(180,140,80,0.1) 70%, transparent 100%);
+  animation: floatSawdust linear infinite; will-change: transform, opacity;
+}
+@keyframes floatSawdust {
+  0% { transform: translateY(0) translateX(0) rotate(0deg) scale(1); opacity: 0; }
+  8% { opacity: 0.8; }
+  50% { transform: translateY(-40px) translateX(15px) rotate(180deg) scale(0.6); opacity: 0.5; }
+  92% { opacity: 0.2; }
+  100% { transform: translateY(-80px) translateX(25px) rotate(360deg) scale(0.2); opacity: 0; }
+}
+.steam-wisp {
+  position: absolute; border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(200,200,210,0.25) 0%, rgba(180,180,190,0.08) 50%, transparent 100%);
+  filter: blur(3px); animation: riseSteam linear infinite; will-change: transform, opacity;
+}
+@keyframes riseSteam {
+  0% { transform: translateY(0) scaleX(1) scaleY(1); opacity: 0; }
+  10% { opacity: 0.5; }
+  40% { transform: translateY(-35px) scaleX(1.5) scaleY(0.8); opacity: 0.35; }
+  70% { transform: translateY(-60px) scaleX(2) scaleY(0.6); opacity: 0.15; }
+  100% { transform: translateY(-90px) scaleX(2.5) scaleY(0.4); opacity: 0; }
+}
+.clay-spin {
+  position: absolute; border-radius: 50%; border: 1px solid rgba(180,130,90,0.15);
+  animation: spinClay linear infinite; will-change: transform, opacity;
+}
+@keyframes spinClay {
+  0% { transform: rotate(0deg) scale(0.8); opacity: 0; }
+  15% { opacity: 0.4; }
+  85% { opacity: 0.4; }
+  100% { transform: rotate(360deg) scale(1.2); opacity: 0; }
+}
+.water-drop {
+  position: absolute; border-radius: 50%;
+  background: radial-gradient(circle, rgba(100,180,255,0.5) 0%, rgba(80,160,240,0.15) 60%, transparent 100%);
+  animation: shimmerDrop ease-in-out infinite; will-change: opacity, transform;
+}
+@keyframes shimmerDrop {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: 0.7; transform: scale(1); }
+}
+@keyframes texturePulse { 0%, 100% { opacity: 0.03; } 50% { opacity: 0.07; } }
+.hero-texture-shimmer {
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, transparent 20%, rgba(255,255,255,0.04) 50%, transparent 80%);
+  animation: texturePulse 8s ease-in-out infinite; pointer-events: none;
+}
+.hero-scanlines {
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(68,196,120,0.016) 3px, rgba(68,196,120,0.016) 4px);
+  z-index: 3; pointer-events: none;
+}
+
+.hero-btn {
+  display: inline-block; padding: 12px 26px; border-radius: 3px;
+  font-size: 0.84rem; font-weight: 600; letter-spacing: 2px;
+  text-transform: uppercase; text-decoration: none;
+  border: 1.5px solid currentColor; background: transparent;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  animation: neonPulse 3.5s ease-in-out infinite;
+}
+.hero-btn:hover { color: #020202 !important; }
+.hero-btn-green { color: #44c478; }
+.hero-btn-green:hover { background-color: #44c478; }
+.hero-btn-orange { color: #FF6B35; }
+.hero-btn-orange:hover { background-color: #FF6B35; }
+.hero-btn-blue { color: #566c83; }
+.hero-btn-blue:hover { background-color: #566c83; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #0a0a0a; }
+::-webkit-scrollbar-thumb { background: var(--green); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #44c478; }
+
+.hamburger-line { display: block; width: 22px; height: 2px; background-color: #44c478; transition: all 0.3s ease; }
+.ig-embed-container { border-radius: 10px; border: 1px solid rgba(68,196,120,0.13); overflow: hidden; }
+.ig-embed-container iframe { border: none; }
+
+.social-card {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 14px 18px; border-radius: 10px; border: 1px solid rgba(68,196,120,0.2);
+  min-width: 76px; transition: all 0.3s ease; text-decoration: none;
+}
+.social-card:hover { border-color: #44c478; color: #44c478; box-shadow: 0 0 12px rgba(68,196,120,0.15), 0 0 4px rgba(68,196,120,0.1); }
+.social-card:hover .social-card-label { color: #44c478; opacity: 1; }
+.social-card-icon { font-size: 1.45rem; color: rgba(234,236,238,0.6); transition: color 0.3s ease; }
+.social-card:hover .social-card-icon { color: #44c478; }
+.social-card-label { font-size: 0.65rem; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.7; transition: all 0.3s ease; }
+
+.section-divider { height: 1px; background: linear-gradient(to right, transparent, rgba(68,196,120,.16) 30%, rgba(68,196,120,.16) 70%, transparent); }
+.card-green-soft { background: rgba(68, 196, 120, 0.06); border: 1px solid rgba(68, 196, 120, 0.14); border-radius: 8px; }
+.card-blue-soft { background: rgba(86, 108, 131, 0.06); border: 1px solid rgba(86, 108, 131, 0.14); border-radius: 8px; }
+.card-orange-soft { background: rgba(255, 107, 53, 0.06); border: 1px solid rgba(255, 107, 53, 0.14); border-radius: 8px; }
+.btn-neon-green { animation: neonPulse 3.5s ease-in-out infinite; }
+.btn-neon-blue { animation: neonPulse 3.5s ease-in-out infinite; }
+
+
+################################################################################
+#                                                                              #
+#  ⚠️⚠️⚠️  ARCHIVOS DE IA — AQUÍ ES DONDE SE INTEGRA LA API  ⚠️⚠️⚠️       #
+#                                                                              #
+#  Estos 2 archivos son los ÚNICOS que necesitan modificación para             #
+#  cambiar el proveedor de IA.                                                 #
+#                                                                              #
+#  Actualmente usan GROQ API con estos parámetros:                             #
+#    URL: https://api.groq.com/openai/v1/chat/completions                     #
+#    Variable de entorno: XAI_API_KEY                                          #
+#    Modelo texto: llama-3.3-70b-versatile                                     #
+#    Modelo visión: meta-llama/llama-4-scout-17b-16e-instruct                  #
+#                                                                              #
+#  Para cambiar de proveedor:                                                  #
+#    1. Cambiar la URL en GROQ_API_URL                                         #
+#    2. Cambiar el modelo en "model: '...'"                                    #
+#    3. Ajustar los headers si el nuevo proveedor los necesita distintos       #
+#    4. La variable de entorno XAI_API_KEY se configura en Netlify             #
+#                                                                              #
+################################################################################
+
+================================================================================
+ARCHIVO 9: src/app/api/analyze/route.ts  ⭐ ARCHIVO DE IA #1
+================================================================================
+import { NextRequest, NextResponse } from 'next/server'
+
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+export async function POST(req: NextRequest) {
+  try {
+    const { text, image, platform } = await req.json()
+
+    if (!text && !image) {
+      return NextResponse.json({ error: 'Proporciona texto o una imagen.' }, { status: 400 })
+    }
+
+    const apiKey = process.env.XAI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ errorFriendly: 'La IA no está configurada todavía. Vuelve a intentarlo más tarde.' })
+    }
+
+    const platformNote = platform
+      ? `Plataforma: ${platform}.`
+      : 'Sin plataforma especificada.'
+
+    const systemPrompt = `Eres "Analista Flow", experta en Social Media con 10 años de experiencia con autónomos en España. ${platformNote}
+Analiza el post y devuelve SOLO este JSON sin markdown ni backticks:
+{"summary":"Diagnóstico en 2 frases.","keyPoints":["Punto 1","Punto 2","Punto 3"],"recommendations":["Cambio 1","Cambio 2","Cambio 3"]}`
+
+    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = []
+    userContent.push({ type: 'text', text: `Analiza este post:\n${text || '(solo imagen adjunta)'}` })
+
+    if (image) {
+      const imageUrl = image.includes('data:') ? image : `data:image/jpeg;base64,${image}`
+      userContent.push({ type: 'image_url', image_url: { url: imageUrl } })
+    }
+
+    // Timeout de 6s para dejar margen dentro del límite de 10s de Netlify
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 6000)
+
+    try {
+      const model = image ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile'
+
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userContent },
+          ],
+          temperature: 0.7,
+          max_tokens: 500,
+        }),
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errBody = await response.text()
+        console.error('Groq analyze error:', response.status, errBody)
+        if (response.status === 401) {
+          return NextResponse.json({ errorFriendly: 'La clave de IA no es válida. Contacta con soporte.' })
+        }
+        if (response.status === 429 || errBody.includes('rate') || errBody.includes('quota')) {
+          return NextResponse.json({ errorFriendly: 'La IA ha alcanzado su límite de uso. Prueba en unos minutos.' })
+        }
+        // Si el modelo de visión falla, reintentar sin imagen
+        if (image && response.status !== 200) {
+          const retryController = new AbortController()
+          const retryTimeout = setTimeout(() => retryController.abort(), 6000)
+          try {
+            const retryResponse = await fetch(GROQ_API_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: `Analiza este post:\n${text || '(imagen adjunta que no se pudo procesar)'}` },
+                ],
+                temperature: 0.7,
+                max_tokens: 500,
+              }),
+              signal: retryController.signal,
+            })
+            clearTimeout(retryTimeout)
+            if (retryResponse.ok) {
+              const retryData = await retryResponse.json()
+              const retryContent = retryData.choices?.[0]?.message?.content || ''
+              let retryParsed
+              try {
+                const match = retryContent.match(/\{[\s\S]*\}/)
+                retryParsed = match ? JSON.parse(match[0]) : null
+              } catch { retryParsed = null }
+              if (retryParsed) return NextResponse.json(retryParsed)
+              return NextResponse.json({ summary: retryContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] })
+            }
+          } catch {
+            clearTimeout(retryTimeout)
+          }
+        }
+        return NextResponse.json({ errorFriendly: 'No se pudo analizar. Prueba de nuevo.' })
+      }
+
+      const data = await response.json()
+      const content = data.choices?.[0]?.message?.content || ''
+
+      let parsed
+      try {
+        const match = content.match(/\{[\s\S]*\}/)
+        parsed = match ? JSON.parse(match[0]) : null
+      } catch { parsed = null }
+
+      if (!parsed) {
+        parsed = { summary: content, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] }
+      }
+
+      return NextResponse.json(parsed)
+    } catch (err: any) {
+      clearTimeout(timeoutId)
+      console.error('Groq analyze timeout/error:', err.message)
+      return NextResponse.json({ errorFriendly: 'El análisis tardó demasiado. Prueba sin imagen o con texto más corto.' })
+    }
+  } catch (err: any) {
+    console.error('Analyze route error:', err.message)
+    return NextResponse.json({ errorFriendly: 'Error inesperado. Prueba de nuevo.' })
+  }
+}
+
+================================================================================
+ARCHIVO 10: src/app/api/suggest-synergies/route.ts  ⭐ ARCHIVO DE IA #2
+================================================================================
+import { NextRequest, NextResponse } from 'next/server'
+
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+export async function POST(req: NextRequest) {
+  try {
+    const { nombre, sector, zona, descripcion } = await req.json()
+
+    if (!sector) {
+      return NextResponse.json({ error: 'Por favor, indica tu sector.' }, { status: 400 })
+    }
+
+    const apiKey = process.env.XAI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({
+        errorFriendly: 'La IA no está configurada todavía. Vuelve a intentarlo más tarde.',
+        suggestions: null,
+      })
+    }
+
+    const prompt = `Eres consultor de sinergias para autónomos en España.
+Negocio: ${nombre || '-'} | Sector: ${sector} | Zona: ${zona || '-'}
+
+Sugiere 3 sinergias CONVENCIONALES y 3 DISRUPTIVAS.
+Para cada una indica:
+- "type": "convencional" o "disruptiva"
+- "businessType": tipo de negocio en 1-2 palabras (ej: "floristería", "gimnasio")
+- "text": descripción concreta de la acción conjunta
+
+JSON sin markdown ni backticks:
+{"suggestions":[{"type":"convencional","businessType":"...","text":"..."}, ...]}`
+
+    const controller = new AbortController()
+    // Timeout de 6s para dejar margen dentro del límite de 10s de Netlify
+    const timeoutId = setTimeout(() => controller.abort(), 6000)
+
+    try {
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: 'Responde SOLO con JSON válido, sin markdown ni backticks.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.8,
+          max_tokens: 800,
+        }),
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errBody = await response.text()
+        console.error('Groq error:', response.status, errBody)
+        if (response.status === 401) {
+          return NextResponse.json({ errorFriendly: 'La clave de IA no es válida. Contacta con soporte.', suggestions: null })
+        }
+        if (response.status === 429 || errBody.includes('rate') || errBody.includes('quota')) {
+          return NextResponse.json({ errorFriendly: 'La IA ha alcanzado su límite de uso. Prueba en unos minutos.', suggestions: null })
+        }
+        return NextResponse.json({ errorFriendly: 'La IA no está disponible ahora. Prueba de nuevo.', suggestions: null })
+      }
+
+      const data = await response.json()
+      const content = data.choices?.[0]?.message?.content || ''
+
+      try {
+        const match = content.match(/\{[\s\S]*\}/)
+        if (match) {
+          const parsed = JSON.parse(match[0])
+          if (parsed.suggestions) return NextResponse.json({ suggestions: parsed.suggestions })
+        }
+      } catch { /* fallback */ }
+
+      const lines = content.split('\n').filter((l: string) => l.trim().length > 0).slice(0, 6)
+      return NextResponse.json({
+        suggestions: lines.map((line: string, i: number) => ({
+          type: i < 3 ? 'convencional' : 'disruptiva',
+          businessType: '',
+          text: line.replace(/^[-*\d.)\s]+/, '').trim(),
+        }))
+      })
+    } catch (err: any) {
+      clearTimeout(timeoutId)
+      return NextResponse.json({ errorFriendly: 'La IA tardó demasiado. Prueba de nuevo.', suggestions: null })
+    }
+  } catch {
+    return NextResponse.json({ errorFriendly: 'Error inesperado. Prueba de nuevo.', suggestions: null })
+  }
+}
+
+################################################################################
+#  FIN DE ARCHIVOS DE IA                                                       #
+################################################################################
+
+
+================================================================================
+ARCHIVO 11: src/app/api/search-business/route.ts (BUSCADOR - NO USA IA)
+================================================================================
+import { NextRequest, NextResponse } from 'next/server'
+
+interface BusinessResult {
+  name: string
+  address: string
+  rating: number
+  totalReviews: number
+  types: string[]
+  url: string
+  source: string
+  photo?: string
+  phone?: string
+  website?: string
+  openNow?: boolean
+  hours?: string
+}
+
+const CACHE_TTL = 24 * 60 * 60 * 1000
+interface CacheEntry { results: BusinessResult[]; source: string; timestamp: number }
+const searchCache = new Map<string, CacheEntry>()
+
+function getCacheKey(query: string): string { return query.toLowerCase().trim().replace(/\s+/g, ' ') }
+function getCached(query: string): CacheEntry | null {
+  const key = getCacheKey(query)
+  const entry = searchCache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.timestamp > CACHE_TTL) { searchCache.delete(key); return null }
+  return entry
+}
+function setCache(query: string, results: BusinessResult[], source: string): void {
+  searchCache.set(getCacheKey(query), { results, source, timestamp: Date.now() })
+}
+
+const MAX_RAPIDAPI_CALLS_PER_DAY = 4
+interface ApiUsageRecord { count: number; date: string }
+let apiUsage: ApiUsageRecord = { count: 0, date: new Date().toISOString().split('T')[0] }
+function canUseRapidAPI(): boolean {
+  const today = new Date().toISOString().split('T')[0]
+  if (apiUsage.date !== today) apiUsage = { count: 0, date: today }
+  return apiUsage.count < MAX_RAPIDAPI_CALLS_PER_DAY
+}
+function incrementRapidAPIUsage(): void {
+  const today = new Date().toISOString().split('T')[0]
+  if (apiUsage.date !== today) apiUsage = { count: 0, date: today }
+  apiUsage.count++
+}
+function getRemainingSearches(): number {
+  const today = new Date().toISOString().split('T')[0]
+  if (apiUsage.date !== today) return MAX_RAPIDAPI_CALLS_PER_DAY
+  return Math.max(0, MAX_RAPIDAPI_CALLS_PER_DAY - apiUsage.count)
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const query = req.nextUrl.searchParams.get('q')
+    if (!query || !query.trim()) return NextResponse.json({ error: 'Por favor, introduce un término de búsqueda.' }, { status: 400 })
+    const searchQuery = query.trim()
+
+    const cached = getCached(searchQuery)
+    if (cached) return NextResponse.json({ results: cached.results, source: cached.source, cached: true, remainingSearches: getRemainingSearches() })
+
+    const rapidApiKey = process.env.RAPIDAPI_KEY
+    const rapidApiHost = process.env.RAPIDAPI_HOST
+
+    if (rapidApiKey && rapidApiHost && canUseRapidAPI()) {
+      try {
+        const rapidResults = await searchRapidAPI(searchQuery, rapidApiKey, rapidApiHost)
+        if (rapidResults.length > 0) {
+          incrementRapidAPIUsage()
+          setCache(searchQuery, rapidResults, 'google_places')
+          return NextResponse.json({ results: rapidResults, source: 'google_places', cached: false, remainingSearches: getRemainingSearches() })
+        }
+      } catch (err: any) { console.warn('RapidAPI failed, falling back to Overpass:', err.message) }
+    }
+
+    const overpassResults = await searchOverpass(searchQuery)
+    setCache(searchQuery, overpassResults, 'openstreetmap')
+    return NextResponse.json({ results: overpassResults, source: 'openstreetmap', cached: false, remainingSearches: getRemainingSearches() })
+  } catch (error: any) {
+    console.error('Search error:', error)
+    return NextResponse.json({ error: 'Error al realizar la búsqueda: ' + (error.message || 'Error desconocido') }, { status: 500 })
+  }
+}
+
+async function searchRapidAPI(query: string, apiKey: string, host: string): Promise<BusinessResult[]> {
+  const parts = query.split(/\s+en\s+/i)
+  let searchQuery = parts[0] || query
+  let city = parts[1] || ''
+  if (!city) {
+    const spanishCities = ['madrid','barcelona','valencia','sevilla','malaga','bilbao','granada','cordoba','zaragoza','pamplona','murcia','alicante','vigo','gijon','coruña','coruna','palma','las palmas','tenerife','toledo','leon','salamanca','vitoria','santander','burgos','badajoz','caceres','tarragona','girona','lleida','cadiz','huelva','almeria','jaen','oviedo','pontevedra','lugo','ourense','valladolid','segovia','avila','zamora','palencia','soria','guadalajara','cuenca','ciudad real','albacete','logroño','logrono','san sebastian','donostia','irun','getxo','mataro','terrassa','sabadell','mostoles','alcala','fuenlabrada','leganes','getafe','alcorcon','coslada','parla']
+    const words = query.toLowerCase().split(/\s+/)
+    for (let i = words.length - 1; i >= 0; i--) {
+      if (spanishCities.includes(words[i])) { city = words[i]; searchQuery = words.slice(0, i).join(' '); break }
+    }
+  }
+  const url = `https://${host}/search-by-query`
+  const params = new URLSearchParams({ query: searchQuery, limit: '20' })
+  if (city) params.set('city', city)
+  params.set('country', 'es')
+  const response = await fetch(`${url}?${params.toString()}`, {
+    method: 'GET',
+    headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': host },
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!response.ok) {
+    if (response.status === 429) throw new Error('RATE_LIMIT')
+    throw new Error(`RapidAPI responded with ${response.status}`)
+  }
+  const data = await response.json()
+  const businesses = data?.data || data?.results || data || []
+  if (!Array.isArray(businesses) || businesses.length === 0) return []
+  return businesses.slice(0, 20).map((biz: any) => {
+    const name = biz.name || biz.businessName || 'Negocio'
+    const address = [biz.address?.street||biz.street, biz.address?.city||biz.city, biz.address?.postalCode||biz.postalCode].filter(Boolean).join(', ') || biz.addressFormatted || biz.vicinity || ''
+    const types = biz.type || biz.types || biz.category || []
+    const typeArr = Array.isArray(types) ? types.map((t: string) => typeof t === 'string' ? t : t?.name || '').filter(Boolean) : [String(types)]
+    const rating = biz.rating || biz.score || 0
+    const totalReviews = biz.reviewsCount || biz.totalReviews || biz.userRatingsTotal || 0
+    let photo = ''
+    if (biz.photoUrl) photo = biz.photoUrl
+    else if (biz.photos?.[0]) photo = typeof biz.photos[0] === 'string' ? biz.photos[0] : biz.photos[0]?.url || biz.photos[0]?.photoUrl || ''
+    const mapsUrl = biz.googleMapsUri || biz.url || biz.website || '#'
+    let hours: string | undefined
+    if (biz.workingHours) hours = typeof biz.workingHours === 'string' ? biz.workingHours : JSON.stringify(biz.workingHours)
+    else if (biz.hours) hours = typeof biz.hours === 'string' ? biz.hours : JSON.stringify(biz.hours)
+    return { name, address, rating: Number(rating)||0, totalReviews: Number(totalReviews)||0, types: typeArr.slice(0,3), url: mapsUrl, source: 'google_places', photo: photo||undefined, phone: biz.phone||biz.phoneNumber||undefined, website: biz.website||biz.siteWeb||undefined, openNow: biz.openNow??biz.opened?.now??undefined, hours } as BusinessResult
+  })
+}
+
+async function searchOverpass(query: string): Promise<BusinessResult[]> {
+  let lat: number | undefined, lon: number | undefined, displayName = ''
+  try {
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&accept-language=es`
+    const geoRes = await fetch(nominatimUrl, { headers: { 'User-Agent': 'FlowAutonomos/1.0' }, signal: AbortSignal.timeout(8000) })
+    const geocodeResult = await geoRes.json()
+    if (geocodeResult && geocodeResult.length > 0) {
+      lat = parseFloat(geocodeResult[0].lat); lon = parseFloat(geocodeResult[0].lon); displayName = geocodeResult[0].display_name || ''
+    }
+  } catch (err) { console.warn('Nominatim geocoding failed:', err) }
+  if (!lat || !lon) {
+    try {
+      const cleanQuery = query.replace(/[áà]/g,'a').replace(/[éè]/g,'e').replace(/[íì]/g,'i').replace(/[óò]/g,'o').replace(/[úù]/g,'u').split(/\s+/).pop() || query
+      const cityUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanQuery+' España')}&limit=1&accept-language=es`
+      const cityRes = await fetch(cityUrl, { headers: { 'User-Agent': 'FlowAutonomos/1.0' }, signal: AbortSignal.timeout(6000) })
+      const cityResult = await cityRes.json()
+      if (cityResult && cityResult.length > 0) { lat = parseFloat(cityResult[0].lat); lon = parseFloat(cityResult[0].lon); displayName = cityResult[0].display_name || '' }
+    } catch { }
+  }
+  if (!lat || !lon) return []
+  const radius = 5000
+  const overpassQuery = `[out:json][timeout:12];(node["shop"](around:${radius},${lat},${lon});node["amenity"](around:${radius},${lat},${lon});node["office"](around:${radius},${lat},${lon});node["craft"](around:${radius},${lat},${lon});node["tourism"~"hotel|hostel|guest_house|apartment"](around:${radius},${lat},${lon});way["shop"](around:${radius},${lat},${lon});way["amenity"](around:${radius},${lat},${lon});way["office"](around:${radius},${lat},${lon});way["craft"](around:${radius},${lat},${lon});way["tourism"~"hotel|hostel|guest_house|apartment"](around:${radius},${lat},${lon}););out center;`
+  try {
+    const overpassRes = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(overpassQuery)}`, signal: AbortSignal.timeout(15000),
+    })
+    const data = await overpassRes.json()
+    if (!data.elements || data.elements.length === 0) return []
+    const namedElements = data.elements.filter((el: any) => el.tags?.name)
+    if (namedElements.length === 0) return []
+    const amenityNames: Record<string, string> = { restaurant:'Restaurante',cafe:'Cafetería',bar:'Bar',bakery:'Panadería',butcher:'Carnicería',hairdresser:'Peluquería',beauty:'Salón de belleza',dentist:'Dentista',pharmacy:'Farmacia',veterinary:'Veterinario',bank:'Banco',fuel:'Gasolinera',post_office:'Oficina de correos',library:'Biblioteca',school:'Escuela',hospital:'Hospital',clinic:'Clínica',doctors:'Médico',cinema:'Cine',theatre:'Teatro',museum:'Museo',gym:'Gimnasio',marketplace:'Mercado' }
+    return namedElements.slice(0, 20).map((element: any) => {
+      const tags = element.tags || {}
+      const elLat = element.lat || element.center?.lat; const elLon = element.lon || element.center?.lon
+      const type = tags.shop || tags.amenity || tags.office || tags.craft || tags.tourism || 'Negocio'
+      const typeName = amenityNames[type] || type.charAt(0).toUpperCase() + type.slice(1)
+      const name = tags.name || typeName
+      const address = [tags['addr:street'],tags['addr:housenumber'],tags['addr:city'],tags['addr:postcode']].filter(Boolean).join(', ') || (displayName ? displayName.split(',').slice(0,2).join(',') : '')
+      const osmUrl = elLat && elLon ? `https://www.openstreetmap.org/?mlat=${elLat}&mlon=${elLon}#map=17/${elLat}/${elLon}` : `https://www.openstreetmap.org/search?query=${encodeURIComponent(name+' '+address)}`
+      return { name, address, rating: 0, totalReviews: 0, types: [typeName], url: osmUrl, source: 'openstreetmap', phone: tags.phone||tags['contact:phone']||undefined, website: tags.website||tags['contact:website']||undefined, hours: tags.opening_hours||undefined } as BusinessResult
+    })
+  } catch (err) { console.warn('Overpass search failed:', err); return [] }
+}
+
+================================================================================
+ARCHIVO 12: src/app/api/health/route.ts
+================================================================================
+import { NextResponse } from 'next/server'
+
+export async function GET() {
+  const xai = process.env.XAI_API_KEY
+  const rapidKey = process.env.RAPIDAPI_KEY
+  const rapidHost = process.env.RAPIDAPI_HOST
+  return NextResponse.json({
+    xai_set: !!xai,
+    xai_prefix: xai ? xai.substring(0, 6) + '...' : 'NOT_SET',
+    rapidapi_set: !!(rapidKey && rapidHost),
+  })
+}
+
+================================================================================
+ARCHIVO 13: src/app/api/route.ts
+================================================================================
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({ message: "Hello, world!" });
+}
+
+
+================================================================================
+ARCHIVO 14: src/components/flow/navbar.tsx
+================================================================================
+'use client'
+
+import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+
+const navLinks = [
+  { label: 'Ayuda', href: '#ayuda' },
+  { label: 'Herramientas', href: '#ayuda' },
+  { label: 'Ideas', href: '#ideas' },
+  { label: 'Sinergias', href: '#sinergias' },
+  { label: 'Analizador', href: '#analizador' },
+  { label: 'eBook', href: '#ebook' },
+]
+
+export default function Navbar() {
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  return (
+    <motion.nav
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      transition={{ duration: 0.6, ease: 'easeOut' }}
+      className="fixed top-0 left-0 right-0 z-[999]"
+      style={{
+        padding: '14px 40px',
+        background: 'rgba(2,2,2,0.9)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        borderBottom: '1px solid rgba(68,196,120,0.09)',
+      }}
+    >
+      <div className="mx-auto flex items-center justify-between" style={{ maxWidth: '1160px' }}>
+        <a href="#inicio" className="flex items-center gap-1 no-underline">
+          <span className="text-[#44c478]" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontWeight: 700, fontSize: '1.38rem', letterSpacing: '3px' }}>Flow</span>
+          <span className="text-[#eaecee]" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontWeight: 700, fontSize: '1.38rem', letterSpacing: '3px' }}>Autónomos</span>
+        </a>
+        <div className="hidden md:flex items-center" style={{ gap: '28px' }}>
+          {navLinks.map((link) => (
+            <a key={link.href + link.label} href={link.href} className="no-underline transition-colors duration-300"
+              style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontSize: '0.77rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(234,236,238,0.6)' }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = '#44c478' }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = 'rgba(234,236,238,0.6)' }}
+            >{link.label}</a>
+          ))}
+        </div>
+        <button onClick={() => setMobileOpen(!mobileOpen)} className="md:hidden flex flex-col gap-[5px] p-2 bg-transparent border-none cursor-pointer" aria-label="Toggle menu">
+          <span className="hamburger-line" style={{ transform: mobileOpen ? 'rotate(45deg) translate(5px, 5px)' : 'none' }} />
+          <span className="hamburger-line" style={{ opacity: mobileOpen ? 0 : 1 }} />
+          <span className="hamburger-line" style={{ transform: mobileOpen ? 'rotate(-45deg) translate(5px, -5px)' : 'none' }} />
+        </button>
+      </div>
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="md:hidden overflow-hidden"
+            style={{ background: 'rgba(2,2,2,0.95)', backdropFilter: 'blur(14px)' }}>
+            <div className="py-3" style={{ padding: '0 17px' }}>
+              {navLinks.map((link) => (
+                <a key={link.href+link.label} href={link.href} onClick={() => setMobileOpen(false)} className="block no-underline transition-colors duration-300"
+                  style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontSize: '0.77rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(234,236,238,0.6)', padding: '10px 0' }}
+                  onMouseEnter={(e) => { (e.target as HTMLElement).style.color = '#44c478' }}
+                  onMouseLeave={(e) => { (e.target as HTMLElement).style.color = 'rgba(234,236,238,0.6)' }}
+                >{link.label}</a>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.nav>
+  )
+}
+
+================================================================================
+ARCHIVO 15: src/components/flow/hero-section.tsx
+================================================================================
+'use client'
+
+import { motion, useScroll, useTransform } from 'framer-motion'
+import { ChevronDown } from 'lucide-react'
+import { useRef, useMemo } from 'react'
+
+function generateParticles(type: 'sawdust' | 'steam' | 'clay' | 'water', count: number) {
+  const particles = []
+  for (let i = 0; i < count; i++) {
+    const seed = Math.random()
+    particles.push({
+      id: i,
+      className: type === 'sawdust' ? 'sawdust-particle' : type === 'steam' ? 'steam-wisp' : type === 'clay' ? 'clay-spin' : 'water-drop',
+      style: type === 'sawdust' ? { left: `${8+seed*18}%`, top: `${15+seed*25}%`, width: `${3+seed*4}px`, height: `${3+seed*4}px`, animationDuration: `${3.5+seed*3}s`, animationDelay: `${seed*2.5}s` }
+        : type === 'steam' ? { left: `${5+seed*20}%`, top: `${60+seed*15}%`, width: `${8+seed*12}px`, height: `${6+seed*10}px`, animationDuration: `${4+seed*3}s`, animationDelay: `${seed*2}s` }
+        : type === 'clay' ? { left: `${68+seed*18}%`, top: `${15+seed*25}%`, width: `${12+seed*18}px`, height: `${12+seed*18}px`, animationDuration: `${5+seed*4}s`, animationDelay: `${seed*2}s` }
+        : { left: `${68+seed*18}%`, top: `${60+seed*20}%`, width: `${3+seed*5}px`, height: `${3+seed*5}px`, animationDuration: `${2+seed*3}s`, animationDelay: `${seed*2.5}s` },
+    })
+  }
+  return particles
+}
+
+export default function HeroSection() {
+  const sectionRef = useRef<HTMLElement>(null)
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start start', 'end start'] })
+  const imageY = useTransform(scrollYProgress, [0, 1], ['0%', '15%'])
+  const imageScale = useTransform(scrollYProgress, [0, 1], [1, 1.08])
+  const sawdustParticles = useMemo(() => generateParticles('sawdust', 8), [])
+  const steamParticles = useMemo(() => generateParticles('steam', 6), [])
+  const clayParticles = useMemo(() => generateParticles('clay', 4), [])
+  const waterParticles = useMemo(() => generateParticles('water', 7), [])
+
+  return (
+    <section ref={sectionRef} id="inicio" className="relative flex items-center justify-center overflow-hidden" style={{ height: '100vh', minHeight: '560px' }}>
+      <div className="hero-image-bg">
+        <motion.img src="/hero-crafts.png" alt="" style={{ y: imageY, scale: imageScale }} />
+      </div>
+      <div className="hero-particles">
+        {sawdustParticles.map((p) => (<span key={`saw-${p.id}`} className={p.className} style={p.style} />))}
+        {steamParticles.map((p) => (<span key={`stm-${p.id}`} className={p.className} style={p.style} />))}
+        {clayParticles.map((p) => (<span key={`clay-${p.id}`} className={p.className} style={p.style} />))}
+        {waterParticles.map((p) => (<span key={`wat-${p.id}`} className={p.className} style={p.style} />))}
+        <div className="hero-texture-shimmer" />
+      </div>
+      <div className="absolute inset-0 z-[2] pointer-events-none" style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(68,196,120,.09) 0%, rgba(86,108,131,.06) 40%, rgba(2,2,2,1) 78%)' }} />
+      <div className="absolute inset-0 z-[3] pointer-events-none" style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 50%, transparent, rgba(2,2,2,.58))' }} />
+      <div className="hero-scanlines" />
+      <div className="relative z-10 flex flex-col items-center justify-center text-center" style={{ padding: '0 32px', maxWidth: '1160px', margin: '0 auto', width: '100%' }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.85, delay: 0.1 }} className="mb-6">
+          <span className="inline-block rounded-full" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontSize: '0.69rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#FF1493', border: '1px solid rgba(255,20,147,0.3)', background: 'rgba(255,20,147,0.05)', padding: '6px 16px' }}>Marketing consciente para autónomos</span>
+        </motion.div>
+        <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.85, delay: 0.25 }} className="mb-6" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontWeight: 700, fontSize: 'clamp(2.1rem, 7vw, 4.6rem)', lineHeight: 1.0, textTransform: 'uppercase' }}>
+          <span className="block" style={{ color: '#eaecee' }}>Sube tu negocio</span>
+          <span className="block" style={{ color: 'white' }}>sin bajar</span>
+          <span className="block" style={{ color: '#eaecee' }}>la moral</span>
+          <span className="block" style={{ color: '#FF6B35', fontSize: '0.53em', letterSpacing: '0.15em' }}>ni las cuentas.</span>
+        </motion.h1>
+        <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.85, delay: 0.4 }} className="mb-10 max-w-2xl" style={{ fontFamily: 'var(--font-inter), Inter, sans-serif', fontSize: 'clamp(0.9rem, 1.9vw, 1.08rem)', color: 'rgba(234,236,238,0.72)', lineHeight: 1.75 }}>Aquí las ideas son gratis, reales y hechas para que el flow vuelva a tu negocio.</motion.p>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.85, delay: 0.55 }} className="flex flex-wrap items-center justify-center gap-4">
+          <a href="#sinergias" className="hero-btn hero-btn-green" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif' }}>Sinergias</a>
+          <a href="#ebook" className="hero-btn hero-btn-orange" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif' }}>eBook</a>
+          <a href="#analizador" className="hero-btn hero-btn-blue" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif' }}>Analizador</a>
+        </motion.div>
+      </div>
+      <motion.div className="absolute bottom-6 left-1/2 z-10" style={{ transform: 'translateX(-50%)' }} animate={{ y: [0, 8, 0] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}>
+        <a href="#ayuda" style={{ color: 'rgba(68,196,120,0.4)' }} className="no-underline transition-colors duration-300 hover:text-[#44c478]"><ChevronDown className="w-6 h-6" /></a>
+      </motion.div>
+    </section>
+  )
+}
+
+================================================================================
+ARCHIVO 16: src/components/flow/how-we-help.tsx
+================================================================================
+'use client'
+
+import { motion } from 'framer-motion'
+import { ExternalLink } from 'lucide-react'
+
+const tools = [
+  { emoji: '🗺️', name: 'Google My Business', desc: 'Aparece en Google Maps y búsquedas locales.', url: 'https://www.google.com/business/', cardClass: 'tc-green', color: '#44c478' },
+  { emoji: '🎨', name: 'Canva', desc: 'Crea posts e historias sin saber diseño.', url: 'https://www.canva.com', cardClass: 'tc-blue', color: '#566c83' },
+  { emoji: '🎬', name: 'CapCut Web', desc: 'Edita vídeos para Reels y TikTok.', url: 'https://www.capcut.com', cardClass: 'tc-orange', color: '#FF6B35' },
+  { emoji: '🤖', name: 'Grok', desc: 'IA gratuita para generar ideas de contenido.', url: 'https://grok.com', cardClass: 'tc-green', color: '#44c478' },
+  { emoji: '📅', name: 'Buffer', desc: 'Programa publicaciones en todas las redes.', url: 'https://buffer.com', cardClass: 'tc-blue', color: '#566c83' },
+]
+
+export default function HowWeHelp() {
+  return (
+    <section id="ayuda" className="relative" style={{ padding: '76px 32px' }}>
+      <div className="absolute top-0 left-0 right-0 divider" />
+      <div style={{ maxWidth: '1160px', margin: '0 auto' }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-10">
+          <h2 style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontWeight: 700, fontSize: 'clamp(1.85rem, 4.2vw, 2.9rem)', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#44c478' }}>¿Cómo te ayudamos?</h2>
+          <p className="mt-2" style={{ fontFamily: 'var(--font-inter), Inter, sans-serif', fontSize: '0.88rem', color: 'rgba(234,236,238,0.5)' }}>Herramientas gratis que potencian tu marketing</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }} className="panel mb-10">
+          <p style={{ fontFamily: 'var(--font-inter), Inter, sans-serif', fontSize: '1.04rem', lineHeight: 1.95, opacity: 0.88 }}>La ayuda es gratis, si te la cobran pasa a ser negocio. Aquí encontrarás mucha ayuda con diferentes herramientas para <strong style={{ color: '#44c478' }}>refrescar la ilusión de abrir puertas cada día</strong>.</p>
+          <p style={{ fontFamily: 'var(--font-inter), Inter, sans-serif', fontSize: '1.04rem', lineHeight: 1.95, opacity: 0.88, marginTop: '1.2rem' }}>Si lo que quieres es negociar conmigo, te dejo abajo mi ebook y mis redes para que contactes.</p>
+        </motion.div>
+        <div className="grid gap-[14px]" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+          {tools.map((tool, i) => (
+            <motion.a key={i} href={tool.url} target="_blank" rel="noopener noreferrer" initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.08 }}
+              className={`${tool.cardClass} flex flex-col items-center text-center no-underline transition-all duration-300`} style={{ padding: '24px 14px 20px' }}>
+              <span className="text-2xl mb-3">{tool.emoji}</span>
+              <h4 className="mb-2 flex items-center gap-1.5" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontWeight: 600, fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', color: tool.color }}>
+                {tool.name} <ExternalLink style={{ width: '12px', height: '12px', opacity: 0.5 }} />
+              </h4>
+              <p style={{ fontFamily: 'var(--font-inter), Inter, sans-serif', fontSize: '0.74rem', color: 'rgba(234,236,238,0.6)', lineHeight: 1.5 }}>{tool.desc}</p>
+            </motion.a>
+          ))}
+        </div>
+      </div>
+      <style jsx global>{`
+        @media (max-width: 1050px) { #ayuda .grid { grid-template-columns: repeat(3, 1fr) !important; } }
+        @media (max-width: 768px) { #ayuda .grid { grid-template-columns: repeat(2, 1fr) !important; } #ayuda { padding: 54px 17px !important; } }
+      `}</style>
+    </section>
+  )
+}
+
+================================================================================
+ARCHIVO 17: src/components/flow/ideas-rescate.tsx
+================================================================================
+'use client'
+
+import { motion } from 'framer-motion'
+
+export default function IdeasRescate() {
+  return (
+    <section id="ideas" className="relative" style={{ padding: '76px 32px' }}>
+      <div className="absolute top-0 left-0 right-0 divider" />
+      <div style={{ maxWidth: '1160px', margin: '0 auto' }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-10">
+          <h2 style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontWeight: 700, fontSize: 'clamp(1.85rem, 4.2vw, 2.9rem)', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#566c83' }}>Ideas Rescate</h2>
+          <p className="mt-2" style={{ fontFamily: 'var(--font-inter), Inter, sans-serif', fontSize: '0.88rem', color: 'rgba(234,236,238,0.5)' }}>Técnicas de marketing que hacen la diferencia.</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="ig-embed-container mx-auto" style={{ maxWidth: '380px' }}>
+          <div className="relative" style={{ aspectRatio: '9/16', maxHeight: '450px', margin: '0 auto' }}>
+            <iframe src="https://www.instagram.com/reel/DN5Wd0hCDD7/embed/" className="absolute inset-0 w-full h-full" allowFullScreen scrolling="no" style={{ border: 'none' }} />
+          </div>
+        </motion.div>
+      </div>
+      <style jsx global>{`@media (max-width: 768px) { #ideas { padding: 54px 17px !important; } }`}</style>
+    </section>
+  )
+}
+
+================================================================================
+ARCHIVO 18: src/components/flow/ebook-section.tsx
+================================================================================
+'use client'
+
+import { motion } from 'framer-motion'
+import Image from 'next/image'
+
+export default function EbookSection() {
+  return (
+    <section id="ebook" className="relative" style={{ padding: '76px 32px' }}>
+      <div className="absolute top-0 left-0 right-0 divider" />
+      <div style={{ maxWidth: '1160px', margin: '0 auto' }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center">
+          <h2 className="mb-3" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontWeight: 700, fontSize: 'clamp(1.85rem, 4.2vw, 2.9rem)', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#FF6B35' }}>El desfibrilador del autónomo</h2>
+          <p className="mb-8" style={{ fontFamily: 'var(--font-inter), Inter, sans-serif', fontSize: 'clamp(0.9rem, 1.9vw, 1.08rem)', color: 'rgba(234,236,238,0.72)', lineHeight: 1.75 }}>El e-book que dará un chispazo a tu negocio.</p>
+          <div className="mx-auto mb-6" style={{ width: '220px', height: '330px', borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(68,196,120,0.2)', boxShadow: '0 8px 40px rgba(68,196,120,0.15), 0 2px 12px rgba(0,0,0,0.5)' }}>
+            <Image src="/ebook-cover.jpg" alt="Portada - El desfibrilador del autónomo" width={220} height={330} className="w-full h-full object-cover" priority />
+          </div>
+          <div className="mb-8 animate-neon-orange" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontWeight: 700, fontSize: '3.1rem', color: '#FF6B35', lineHeight: 1 }}>9,99€</div>
+          <a href="https://go.hotmart.com/M105158609F" target="_blank" rel="noopener noreferrer" className="hero-btn hero-btn-orange inline-block no-underline" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif' }}>Comprar por 9,99€</a>
+        </motion.div>
+      </div>
+      <style jsx global>{`@media (max-width: 768px) { #ebook { padding: 54px 17px !important; } }`}</style>
+    </section>
+  )
+}
+
+================================================================================
+ARCHIVO 19: src/components/flow/footer.tsx
+================================================================================
+'use client'
+
+import { motion } from 'framer-motion'
+
+export default function Footer() {
+  const currentYear = new Date().getFullYear()
+  const socials = [
+    { name: 'Instagram', url: 'https://www.instagram.com/np_mk_consciente', icon: (<svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>) },
+    { name: 'TikTok', url: 'https://www.tiktok.com/@np_mk_consciente', icon: (<svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>) },
+    { name: 'YouTube', url: 'https://youtube.com/@np.marketingconsciente', icon: (<svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>) },
+    { name: 'Facebook', url: 'https://www.facebook.com/share/1LAfkjWvar/', icon: (<svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>) },
+  ]
+  return (
+    <footer className="relative" style={{ padding: '48px 32px', background: 'rgba(255,255,255,0.013)', borderTop: '1px solid rgba(68,196,120,0.07)' }}>
+      <div className="absolute top-0 left-0 right-0 divider" />
+      <div style={{ maxWidth: '1160px', margin: '0 auto' }} className="text-center">
+        <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="mb-8" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif', fontWeight: 500, fontSize: '0.88rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#44c478' }}>Sígueme o contacta en mis redes</motion.p>
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }} className="flex items-center justify-center gap-4 mb-10">
+          {socials.map((social) => (
+            <a key={social.name} href={social.url} target="_blank" rel="noopener noreferrer" className="social-card no-underline" title={social.name} style={{ color: 'rgba(234,236,238,0.6)' }}>
+              <span className="social-card-icon">{social.icon}</span>
+              <span className="social-card-label" style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif' }}>{social.name}</span>
+            </a>
+          ))}
+        </motion.div>
+        <p style={{ fontFamily: 'var(--font-inter), Inter, sans-serif', fontSize: '0.73rem', letterSpacing: '1px', opacity: 0.28, color: '#eaecee' }}>© {currentYear} FlowAutónomos | Marketing consciente</p>
+      </div>
+      <style jsx global>{`@media (max-width: 768px) { footer { padding: 36px 17px !important; } }`}</style>
+    </footer>
+  )
+}
+
+
+================================================================================
+ARCHIVO 20: src/components/flow/synergies-section.tsx  (SECCIÓN SINERGIAS)
+================================================================================
+'use client'
+
+import { motion } from 'framer-motion'
+import { Search, MapPin, Star, ExternalLink, Loader2, Building2, Sparkles, ArrowRight, Phone, Globe, Clock, SearchX, RefreshCw } from 'lucide-react'
+import { useState, useCallback } from 'react'
+
+interface Business {
+  name: string; address: string; rating: number; totalReviews: number;
+  types: string[]; url: string; source: string; photo?: string;
+  phone?: string; website?: string; openNow?: boolean; hours?: string;
+}
+type TabMode = 'search' | 'recommend'
+type ViewMode = 'input' | 'results'
+interface Suggestion { type: string; businessType: string; text: string }
+interface RecommendForm { nombre: string; sector: string; zona: string; descripcion: string }
+
+export default function SinergiasSection() {
+  const [tab, setTab] = useState<TabMode>('search')
+  const [view, setView] = useState<ViewMode>('input')
+  const [sector, setSector] = useState('')
+  const [zona, setZona] = useState('')
+  const [recForm, setRecForm] = useState<RecommendForm>({ nombre: '', sector: '', zona: '', descripcion: '' })
+  const [loading, setLoading] = useState(false)
+  const [aiSuggestions, setAiSuggestions] = useState<Suggestion[]>([])
+  const [businessResults, setBusinessResults] = useState<Business[]>([])
+  const [dataSource, setDataSource] = useState('')
+  const [remainingSearches, setRemainingSearches] = useState<number | null>(null)
+  const [errorFriendly, setErrorFriendly] = useState('')
+  const [loadingBusinesses, setLoadingBusinesses] = useState<string | null>(null)
+  const [savedZona, setSavedZona] = useState('')
+
+  const resetResults = () => {
+    setView('input'); setBusinessResults([]); setAiSuggestions([]); setDataSource(''); setRemainingSearches(null); setErrorFriendly(''); setLoadingBusinesses(null)
+  }
+
+  const handleSearch = async () => {
+    const q = `${sector} ${zona}`.trim()
+    if (!q) return
+    setLoading(true); setErrorFriendly(''); setBusinessResults([]); setAiSuggestions([]); setView('results')
+    try {
+      const res = await fetch('/api/search-business?' + new URLSearchParams({ q }), { signal: AbortSignal.timeout(20000) })
+      const data = await res.json()
+      if (data.error) setErrorFriendly(data.error)
+      else { setBusinessResults(data.results || []); setDataSource(data.source || ''); setRemainingSearches(data.remainingSearches ?? null) }
+    } catch (err: any) { setErrorFriendly('La búsqueda tardó demasiado. Inténtalo de nuevo.') }
+    finally { setLoading(false) }
+  }
+
+  const handleRecommend = async () => {
+    if (!recForm.sector.trim()) return
+    if (!recForm.zona.trim()) { setErrorFriendly('Por favor, indica tu zona o ciudad para poder buscar negocios cercanos.'); return }
+    setSavedZona(recForm.zona.trim())
+    setLoading(true); setErrorFriendly(''); setAiSuggestions([]); setBusinessResults([]); setView('results')
+    try {
+      const res = await fetch('/api/suggest-synergies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(recForm), signal: AbortSignal.timeout(25000) })
+      const responseText = await res.text()
+      if (!responseText || responseText.trim().length === 0) { setErrorFriendly('El servidor no respondió. Prueba de nuevo.'); return }
+      const data = JSON.parse(responseText)
+      if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) { setAiSuggestions(data.suggestions) }
+      else if (data.errorFriendly) { setErrorFriendly(data.errorFriendly) }
+      else { setErrorFriendly('No se pudieron generar sugerencias. Inténtalo de nuevo.') }
+    } catch (err: any) { setErrorFriendly('La petición tardó demasiado. Inténtalo de nuevo.') }
+    finally { setLoading(false) }
+  }
+
+  const searchForType = useCallback(async (businessType: string) => {
+    if (!businessType) return
+    const zona = savedZona || recForm.zona.trim()
+    if (!zona) { setErrorFriendly('No se indicó una zona. Vuelve atrás e indica tu ciudad.'); return }
+    const q = `${businessType} en ${zona}`.trim()
+    setLoadingBusinesses(businessType); setBusinessResults([]); setErrorFriendly('')
+    try {
+      const bizRes = await fetch('/api/search-business?' + new URLSearchParams({ q }), { signal: AbortSignal.timeout(15000) })
+      const bizData = await bizRes.json()
+      if (bizData.results && bizData.results.length > 0) { setBusinessResults(bizData.results); setDataSource(bizData.source || ''); setRemainingSearches(bizData.remainingSearches ?? null) }
+      else { setBusinessResults([]); setErrorFriendly(`No se encontraron negocios de tipo "${businessType}" en ${zona}. Prueba con otro tipo.`) }
+    } catch { setBusinessResults([]); setErrorFriendly('La búsqueda de negocios falló. Prueba de nuevo.') }
+    finally { setLoadingBusinesses(null) }
+  }, [savedZona, recForm.zona])
+
+  const handleKeyDownSearch = (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleSearch() }
+  const handleKeyDownRec = (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleRecommend() }
+  const renderStars = (rating: number) => Array.from({ length: 5 }, (_, i) => (<Star key={i} className={`w-3.5 h-3.5 ${i < Math.floor(rating) ? 'text-[#44c478] fill-[#44c478]' : 'text-white/15'}`} />))
+
+  if (view === 'results') {
+    return (
+      <section id="sinergias" className="relative py-20 px-4 sm:px-6 lg:px-8">
+        <div className="absolute inset-0 bg-[#020202]" />
+        <div className="absolute top-0 left-0 right-0 section-divider" />
+        <div className="relative z-10 max-w-4xl mx-auto">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+              <button onClick={resetResults} className="text-[#44c478]/60 hover:text-[#44c478] text-xs flex items-center gap-1 transition-colors"><RefreshCw className="w-3 h-3" /> Nueva búsqueda</button>
+              <div className="flex gap-2">
+                <button onClick={() => { setTab('search'); resetResults() }} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${tab === 'search' ? 'bg-[#44c478]/15 text-[#44c478] border border-[#44c478]/30' : 'text-[#eaecee]/30 border border-transparent hover:text-[#eaecee]/50'}`} style={{ fontFamily: "'Oswald', sans-serif", letterSpacing: '1px', textTransform: 'uppercase' }}><Search className="w-3 h-3 inline mr-1" /> Buscar</button>
+                <button onClick={() => { setTab('recommend'); resetResults() }} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${tab === 'recommend' ? 'bg-[#566c83]/15 text-[#566c83] border border-[#566c83]/30' : 'text-[#eaecee]/30 border border-transparent hover:text-[#eaecee]/50'}`} style={{ fontFamily: "'Oswald', sans-serif", letterSpacing: '1px', textTransform: 'uppercase' }}><Sparkles className="w-3 h-3 inline mr-1" /> IA sugiere</button>
+              </div>
+            </div>
+            {loading && (<div className="flex flex-col items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-[#44c478]/60 mb-3" /><p className="text-[#eaecee]/50 text-sm">{tab === 'recommend' ? 'Analizando tu negocio...' : 'Buscando negocios...'}</p></div>)}
+            {!loading && errorFriendly && (<div className="p-4 rounded-lg bg-[#566c83]/10 border border-[#566c83]/20 text-center mb-6"><p className="text-[#eaecee]/70 text-sm">{errorFriendly}</p></div>)}
+            {!loading && aiSuggestions.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-1.5 mb-3"><Sparkles className="w-4 h-4 text-[#FF6B35]" /><h3 className="text-sm text-[#FF6B35] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600 }}>Sinergias sugeridas para ti</h3></div>
+                <p className="text-[#eaecee]/35 text-xs mb-3">Pincha en el botón de cada sugerencia para buscar negocios reales en tu zona</p>
+                <div className="space-y-2">
+                  {aiSuggestions.map((sug, i) => (
+                    <div key={i} className={`p-3.5 rounded-lg transition-all ${sug.type === 'disruptiva' ? 'card-orange-soft' : 'card-green-soft'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-[10px] uppercase tracking-wider font-medium ${sug.type === 'disruptiva' ? 'text-[#FF6B35]' : 'text-[#44c478]'}`}>{sug.type}</span>
+                            {sug.businessType && (<span className="text-[10px] uppercase tracking-wider font-medium text-[#566c83]/70 bg-[#566c83]/10 px-1.5 py-0.5 rounded">{sug.businessType}</span>)}
+                          </div>
+                          <p className="text-[#eaecee]/70 text-sm leading-relaxed mb-2">{sug.text}</p>
+                          {sug.businessType && (
+                            <button onClick={() => searchForType(sug.businessType)} disabled={!!loadingBusinesses} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#44c478]/10 text-[#44c478] text-xs hover:bg-[#44c478]/20 disabled:opacity-40 transition-colors cursor-pointer" style={{ fontFamily: "'Oswald', sans-serif", letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                              {loadingBusinesses === sug.businessType ? (<><Loader2 className="w-3 h-3 animate-spin" /> Buscando...</>) : (<><Search className="w-3 h-3" /> Buscar {sug.businessType} en {savedZona || recForm.zona || 'tu zona'}</>)}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!loading && businessResults.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-[#44c478]" /><h3 className="text-sm text-[#44c478] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600 }}>Negocios encontrados</h3></div>
+                  <div className="flex items-center gap-2">
+                    {remainingSearches !== null && dataSource === 'google_places' && (<span className="text-[10px] text-[#eaecee]/20">{remainingSearches}/4</span>)}
+                    <span className="text-[10px] text-[#eaecee]/25 uppercase tracking-wider">{dataSource === 'google_places' ? 'Google Maps' : 'OpenStreetMap'}</span>
+                  </div>
+                </div>
+                <div className="max-h-[480px] overflow-y-auto pr-1 space-y-2">
+                  {businessResults.map((biz, index) => (
+                    <motion.div key={index} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3, delay: index * 0.04 }} className="p-3.5 rounded-lg bg-[#020202] border border-[#44c478]/8 hover:border-[#44c478]/20 transition-colors">
+                      <div className="flex items-start gap-3">
+                        {biz.photo ? (<div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-[#0a0a0a]"><img src={biz.photo} alt={biz.name} className="w-full h-full object-cover" loading="lazy" /></div>) : (<div className="flex-shrink-0 w-14 h-14 rounded-lg bg-[#44c478]/8 flex items-center justify-center"><Building2 className="w-5 h-5 text-[#44c478]/40" /></div>)}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-[#eaecee] font-medium text-sm truncate mb-0.5">{biz.name}</h4>
+                          {biz.rating > 0 && (<div className="flex items-center gap-1.5 mb-0.5"><div className="flex items-center gap-0.5">{renderStars(biz.rating)}</div><span className="text-[#eaecee]/40 text-[11px] font-medium">{biz.rating}</span>{biz.totalReviews > 0 && (<span className="text-[#eaecee]/25 text-[10px]">({biz.totalReviews})</span>)}</div>)}
+                          {biz.address && (<p className="text-[#eaecee]/30 text-xs truncate mb-1">{biz.address}</p>)}
+                          {biz.types && biz.types.length > 0 && (<div className="flex items-center gap-1.5 mb-1 flex-wrap">{biz.types.slice(0, 2).map((type, i) => (<span key={i} className="inline-block px-2 py-0.5 rounded text-[9px] uppercase tracking-wider bg-[#566c83]/10 text-[#566c83]/60 border border-[#566c83]/10">{typeof type === 'string' ? type.charAt(0).toUpperCase() + type.slice(1) : type}</span>))}</div>)}
+                          <div className="flex items-center gap-3 mt-1 flex-wrap">
+                            {biz.phone && (<span className="flex items-center gap-1 text-[#eaecee]/25 text-[10px]"><Phone className="w-2.5 h-2.5" /> {biz.phone}</span>)}
+                            {biz.website && (<a href={biz.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#eaecee]/25 hover:text-[#44c478]/60 text-[10px] transition-colors"><Globe className="w-2.5 h-2.5" /> Web</a>)}
+                            {biz.openNow !== undefined && (<span className={`flex items-center gap-1 text-[10px] font-medium ${biz.openNow ? 'text-[#44c478]/60' : 'text-[#FF6B35]/60'}`}><Clock className="w-2.5 h-2.5" /> {biz.openNow ? 'Abierto' : 'Cerrado'}</span>)}
+                          </div>
+                        </div>
+                        <a href={biz.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-[#44c478]/10 text-[#44c478]/70 hover:text-[#44c478] hover:bg-[#44c478]/20 transition-colors text-xs flex items-center gap-1 mt-1">Ver <ExternalLink className="w-3 h-3" /></a>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!loading && !errorFriendly && aiSuggestions.length === 0 && businessResults.length === 0 && (<div className="text-center py-10 text-[#eaecee]/20"><SearchX className="w-10 h-10 mx-auto mb-2 opacity-40" /><p className="text-sm">No hemos encontrado resultados.</p><p className="text-xs mt-1">Prueba con otros datos.</p></div>)}
+            {!loading && loadingBusinesses && businessResults.length === 0 && aiSuggestions.length > 0 && (<div className="flex items-center gap-2 py-4 justify-center"><Loader2 className="w-4 h-4 animate-spin text-[#44c478]/50" /><p className="text-[#eaecee]/30 text-xs">Buscando {loadingBusinesses} en tu zona...</p></div>)}
+          </motion.div>
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section id="sinergias" className="relative py-20 px-4 sm:px-6 lg:px-8">
+      <div className="absolute inset-0 bg-[#020202]" />
+      <div className="absolute top-0 left-0 right-0 section-divider" />
+      <div className="relative z-10 max-w-4xl mx-auto">
+        <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-8">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl text-[#44c478]/80 mb-4" style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700 }}>¿Con quién te alías hoy?</h2>
+          <p className="text-[#eaecee]/50 text-base max-w-lg mx-auto">Encuentra aliados para tu negocio o deja que la IA te sugiera con quién podría funcionar.</p>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="panel p-6 sm:p-8">
+          <div className="flex gap-2 mb-6">
+            <button onClick={() => setTab('search')} className={`flex-1 p-3 rounded-xl transition-all text-left group ${tab === 'search' ? 'card-green-soft bg-[#44c478]/10' : 'hover:bg-white/[0.02]'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${tab === 'search' ? 'bg-[#44c478]/20' : 'bg-[#44c478]/8'}`}><Search className={`w-4 h-4 ${tab === 'search' ? 'text-[#44c478]' : 'text-[#44c478]/40'}`} /></div>
+                <div><h3 className={`text-sm font-medium mb-0.5 ${tab === 'search' ? 'text-[#eaecee]' : 'text-[#eaecee]/50'}`}>Buscar sinergia</h3><p className={`text-[11px] ${tab === 'search' ? 'text-[#eaecee]/40' : 'text-[#eaecee]/20'}`}>Ya sabes qué tipo de negocio buscas</p></div>
+              </div>
+            </button>
+            <button onClick={() => setTab('recommend')} className={`flex-1 p-3 rounded-xl transition-all text-left group ${tab === 'recommend' ? 'card-blue-soft bg-[#566c83]/10' : 'hover:bg-white/[0.02]'}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${tab === 'recommend' ? 'bg-[#566c83]/20' : 'bg-[#566c83]/8'}`}><Sparkles className={`w-4 h-4 ${tab === 'recommend' ? 'text-[#566c83]' : 'text-[#566c83]/40'}`} /></div>
+                <div><h3 className={`text-sm font-medium mb-0.5 ${tab === 'recommend' ? 'text-[#eaecee]' : 'text-[#eaecee]/50'}`}>IA me sugiere</h3><p className={`text-[11px] ${tab === 'recommend' ? 'text-[#eaecee]/40' : 'text-[#eaecee]/20'}`}>No sabes con quién aliarte</p></div>
+              </div>
+            </button>
+          </div>
+          {tab === 'search' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <p className="text-[#eaecee]/60 text-sm mb-4 text-center">¿Qué tipo de negocio buscas y en qué zona?</p>
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <div className="flex-1 relative"><div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#eaecee]/25 text-sm">🔍</div><input type="text" placeholder="Sector (ej: floristería, café...)" value={sector} onChange={(e) => setSector(e.target.value)} onKeyDown={handleKeyDownSearch} className="w-full pl-10 pr-4 py-3.5 rounded-lg bg-[#020202] border border-[#44c478]/15 text-[#eaecee] placeholder:text-[#eaecee]/20 focus:outline-none focus:border-[#44c478]/40 transition-colors text-sm" /></div>
+                <div className="flex-1 relative"><div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#eaecee]/25 text-sm">📍</div><input type="text" placeholder="Zona o ciudad" value={zona} onChange={(e) => setZona(e.target.value)} onKeyDown={handleKeyDownSearch} className="w-full pl-10 pr-4 py-3.5 rounded-lg bg-[#020202] border border-[#44c478]/15 text-[#eaecee] placeholder:text-[#eaecee]/20 focus:outline-none focus:border-[#44c478]/40 transition-colors text-sm" /></div>
+              </div>
+              <button onClick={handleSearch} disabled={loading} className="w-full py-3.5 rounded-lg bg-[#44c478] text-[#020202] font-bold text-sm uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-[#44c478]/90 transition-colors cursor-pointer" style={{ fontFamily: "'Oswald', sans-serif" }}>{loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Buscando...</>) : (<><Search className="w-4 h-4" /> Buscar</>)}</button>
+            </motion.div>
+          )}
+          {tab === 'recommend' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <p className="text-[#eaecee]/60 text-sm mb-4 text-center">Cuéntanos sobre tu negocio y te sugerimos con quién aliarte.</p>
+              <div className="space-y-3 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input type="text" placeholder="Nombre de tu negocio" value={recForm.nombre} onChange={(e) => setRecForm({ ...recForm, nombre: e.target.value })} className="w-full px-4 py-3 rounded-lg bg-[#020202] border border-[#566c83]/20 text-[#eaecee] placeholder:text-[#eaecee]/20 focus:outline-none focus:border-[#566c83]/50 transition-colors text-sm" />
+                  <input type="text" placeholder="Sector (ej: peluquería, cafetería...)" value={recForm.sector} onChange={(e) => setRecForm({ ...recForm, sector: e.target.value })} className="w-full px-4 py-3 rounded-lg bg-[#020202] border border-[#566c83]/20 text-[#eaecee] placeholder:text-[#eaecee]/20 focus:outline-none focus:border-[#566c83]/50 transition-colors text-sm" />
+                </div>
+                <input type="text" placeholder="Zona o ciudad (ej: Granada)" value={recForm.zona} onChange={(e) => setRecForm({ ...recForm, zona: e.target.value })} onKeyDown={handleKeyDownRec} className="w-full px-4 py-3 rounded-lg bg-[#020202] border border-[#566c83]/20 text-[#eaecee] placeholder:text-[#eaecee]/20 focus:outline-none focus:border-[#566c83]/50 transition-colors text-sm" />
+                <textarea placeholder="Describe brevemente tu negocio (opcional)" value={recForm.descripcion} onChange={(e) => setRecForm({ ...recForm, descripcion: e.target.value })} rows={2} className="w-full px-4 py-3 rounded-lg bg-[#020202] border border-[#566c83]/20 text-[#eaecee] placeholder:text-[#eaecee]/20 focus:outline-none focus:border-[#566c83]/50 transition-colors text-sm resize-none" />
+              </div>
+              <button onClick={handleRecommend} disabled={loading || !recForm.sector.trim()} className="w-full py-3.5 rounded-lg bg-[#566c83] text-[#eaecee] font-bold text-sm uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-[#566c83]/90 transition-colors cursor-pointer" style={{ fontFamily: "'Oswald', sans-serif" }}>{loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Pensando...</>) : (<><Sparkles className="w-4 h-4" /> Sugerirme sinergias</>)}</button>
+            </motion.div>
+          )}
+        </motion.div>
+      </div>
+    </section>
+  )
+}
+
