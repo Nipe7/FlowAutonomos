@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,48 +10,100 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Proporciona texto o una imagen.' }, { status: 400 })
     }
 
-    const apiKey = process.env.XAI_API_KEY
+    const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
-      return NextResponse.json({ errorFriendly: 'La IA no está configurada todavía. Vuelve a intentarlo más tarde.' })
+      return NextResponse.json({ errorFriendly: 'La IA no está configurada. Contacta con soporte.' })
     }
 
-    const platformNote = platform
-      ? `Plataforma: ${platform}.`
+    const platformInfo: Record<string, string> = {
+      instagram: 'Instagram (visual, hashtags, stories)',
+      tiktok: 'TikTok (vídeos cortos, trends, música)',
+      facebook: 'Facebook (comunidad, texto largo)',
+      linkedin: 'LinkedIn (profesional, B2B)',
+      x: 'X/Twitter (brevedad, inmediatez)'
+    }
+
+    const platformNote = platform && platformInfo[platform]
+      ? `Plataforma: ${platformInfo[platform]}`
       : 'Sin plataforma especificada.'
 
-    const systemPrompt = `Eres "Analista Flow", experta en Social Media con 10 años de experiencia con autónomos en España. ${platformNote}
-Analiza el post y devuelve SOLO este JSON sin markdown ni backticks:
-{"summary":"Diagnóstico en 2 frases.","keyPoints":["Punto 1","Punto 2","Punto 3"],"recommendations":["Cambio 1","Cambio 2","Cambio 3"]}`
+    const systemPrompt = `Eres "Analista Flow", experta en Social Media con 10 años de experiencia ayudando a autónomos en España. ${platformNote}
 
-    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = []
-    userContent.push({ type: 'text', text: `Analiza este post:\n${text || '(solo imagen adjunta)'}` })
+Analiza este post como experta en marketing y devuelve EXACTAMENTE este formato JSON sin markdown ni explicaciones:
 
+{
+  "summary": "Diagnóstico general del post en 2-3 frases directas y prácticas",
+  "keyPoints": [
+    "Punto fuerte 1 del contenido",
+    "Punto fuerte 2 o aspecto destacable",
+    "Punto fuerte 3 o elemento que funciona"
+  ],
+  "recommendations": [
+    "Mejora concreta 1 (accionable)",
+    "Mejora concreta 2 (accionable)",
+    "Mejora concreta 3 (accionable)"
+  ]
+}
+
+Sé específica, práctica y directa. Enfócate en lo que el autónomo puede mejorar HOY.`
+
+    // Construir contenido del mensaje
+    const messageContent: Array<any> = []
+
+    // Si hay imagen, procesarla primero
     if (image) {
-      const imageUrl = image.includes('data:') ? image : `data:image/jpeg;base64,${image}`
-      userContent.push({ type: 'image_url', image_url: { url: imageUrl } })
+      // Extraer el base64 y el tipo de imagen
+      let imageBase64 = image
+      let mediaType = 'image/jpeg'
+
+      if (image.includes('data:')) {
+        const match = image.match(/data:(image\/[a-zA-Z]+);base64,(.*)/)
+        if (match) {
+          mediaType = match[1]
+          imageBase64 = match[2]
+        } else {
+          imageBase64 = image.split(',')[1] || image
+        }
+      }
+
+      messageContent.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: imageBase64
+        }
+      })
     }
 
-    // Timeout de 6s para dejar margen dentro del límite de 10s de Netlify
+    // Añadir el texto del prompt
+    const textPrompt = text 
+      ? `Analiza este post:\n\n${text}`
+      : 'Analiza la imagen adjunta del post y proporciona feedback de marketing.'
+
+    messageContent.push({
+      type: 'text',
+      text: textPrompt
+    })
+
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 6000)
+    const timeoutId = setTimeout(() => controller.abort(), 20000)
 
     try {
-      const model = image ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile'
-
-      const response = await fetch(GROQ_API_URL, {
+      const response = await fetch(ANTHROPIC_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model,
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1500,
+          system: systemPrompt,
           messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userContent },
+            { role: 'user', content: messageContent }
           ],
-          temperature: 0.7,
-          max_tokens: 500,
         }),
         signal: controller.signal,
       })
@@ -59,75 +111,49 @@ Analiza el post y devuelve SOLO este JSON sin markdown ni backticks:
 
       if (!response.ok) {
         const errBody = await response.text()
-        console.error('Groq analyze error:', response.status, errBody)
+        console.error('Anthropic analyze error:', response.status, errBody)
         if (response.status === 401) {
           return NextResponse.json({ errorFriendly: 'La clave de IA no es válida. Contacta con soporte.' })
         }
-        if (response.status === 429 || errBody.includes('rate') || errBody.includes('quota')) {
-          return NextResponse.json({ errorFriendly: 'La IA ha alcanzado su límite de uso. Prueba en unos minutos.' })
-        }
-        // Si el modelo de visión falla, reintentar sin imagen
-        if (image && response.status !== 200) {
-          const retryController = new AbortController()
-          const retryTimeout = setTimeout(() => retryController.abort(), 6000)
-          try {
-            const retryResponse = await fetch(GROQ_API_URL, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`,
-              },
-              body: JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: `Analiza este post:\n${text || '(imagen adjunta que no se pudo procesar)'}` },
-                ],
-                temperature: 0.7,
-                max_tokens: 500,
-              }),
-              signal: retryController.signal,
-            })
-            clearTimeout(retryTimeout)
-            if (retryResponse.ok) {
-              const retryData = await retryResponse.json()
-              const retryContent = retryData.choices?.[0]?.message?.content || ''
-              let retryParsed
-              try {
-                const match = retryContent.match(/\{[\s\S]*\}/)
-                retryParsed = match ? JSON.parse(match[0]) : null
-              } catch { retryParsed = null }
-              if (retryParsed) return NextResponse.json(retryParsed)
-              return NextResponse.json({ summary: retryContent, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] })
-            }
-          } catch {
-            clearTimeout(retryTimeout)
-          }
+        if (response.status === 429) {
+          return NextResponse.json({ errorFriendly: 'La IA está ocupada. Prueba en unos segundos.' })
         }
         return NextResponse.json({ errorFriendly: 'No se pudo analizar. Prueba de nuevo.' })
       }
 
       const data = await response.json()
-      const content = data.choices?.[0]?.message?.content || ''
+      const content = data.content?.[0]?.text || ''
 
+      // Extraer JSON del contenido
       let parsed
       try {
         const match = content.match(/\{[\s\S]*\}/)
-        parsed = match ? JSON.parse(match[0]) : null
-      } catch { parsed = null }
-
-      if (!parsed) {
-        parsed = { summary: content, keyPoints: ['Análisis completado'], recommendations: ['Revisa el resumen'] }
+        if (match) {
+          parsed = JSON.parse(match[0])
+          if (parsed.summary && parsed.keyPoints && parsed.recommendations) {
+            return NextResponse.json(parsed)
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing JSON:', e)
       }
 
-      return NextResponse.json(parsed)
+      // Fallback: estructurar la respuesta aunque no sea JSON perfecto
+      return NextResponse.json({
+        summary: content.substring(0, 200) + '...',
+        keyPoints: ['Análisis completado', 'Revisa el contenido general'],
+        recommendations: ['Aplica los consejos del resumen']
+      })
+
     } catch (err: any) {
       clearTimeout(timeoutId)
-      console.error('Groq analyze timeout/error:', err.message)
-      return NextResponse.json({ errorFriendly: 'El análisis tardó demasiado. Prueba sin imagen o con texto más corto.' })
+      if (err.name === 'AbortError') {
+        return NextResponse.json({ errorFriendly: 'El análisis tardó demasiado. Prueba con texto más corto.' })
+      }
+      return NextResponse.json({ errorFriendly: 'Error de conexión con la IA.' })
     }
   } catch (err: any) {
-    console.error('Analyze route error:', err.message)
+    console.error('Analyze route error:', err)
     return NextResponse.json({ errorFriendly: 'Error inesperado. Prueba de nuevo.' })
   }
 }
