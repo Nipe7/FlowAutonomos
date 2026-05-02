@@ -189,13 +189,14 @@ async function searchRapidAPI(query: string, apiKey: string, host: string): Prom
     }
   }
 
-  const url = `https://${host}/search-by-query`
+  // Endpoint actualizado: /search (el antiguo /search-by-query ya no existe)
+  const url = `https://${host}/search`
   const params = new URLSearchParams({
-    query: searchQuery,
+    query: city ? `${searchQuery} ${city} Spain` : `${searchQuery} Spain`,
     limit: '20',
+    country: 'es',
+    language: 'es',
   })
-  if (city) params.set('city', city)
-  params.set('country', 'es')
 
   const response = await fetch(`${url}?${params.toString()}`, {
     method: 'GET',
@@ -216,45 +217,58 @@ async function searchRapidAPI(query: string, apiKey: string, host: string): Prom
   }
 
   const data = await response.json()
-  const businesses = data?.data || data?.results || data || []
+  // La API nueva devuelve data.data como array de negocios
+  const businesses = data?.data || data?.results || []
 
   if (!Array.isArray(businesses) || businesses.length === 0) {
     return []
   }
 
   return businesses.slice(0, 20).map((biz: any) => {
-    const name = biz.name || biz.businessName || 'Negocio'
-    const address = [
-      biz.address?.street || biz.street,
-      biz.address?.city || biz.city,
-      biz.address?.postalCode || biz.postalCode,
-    ].filter(Boolean).join(', ') || biz.addressFormatted || biz.vicinity || ''
+    const name = biz.name || 'Negocio'
+    // La API nueva usa full_address, address, street_address, city, etc.
+    const address = biz.full_address || biz.address || [
+      biz.street_address || biz.street,
+      biz.city,
+      biz.zipcode || biz.postalCode,
+      biz.state,
+      biz.country,
+    ].filter(Boolean).join(', ') || ''
 
-    const types = biz.type || biz.types || biz.category || []
+    // La API nueva usa type (string) y subtypes (array)
+    const types = biz.subtypes || (biz.type ? [biz.type] : biz.types || [])
     const typeArr = Array.isArray(types)
       ? types.map((t: string) => typeof t === 'string' ? t : t?.name || '').filter(Boolean)
       : [String(types)]
 
     const rating = biz.rating || biz.score || 0
-    const totalReviews = biz.reviewsCount || biz.totalReviews || biz.userRatingsTotal || 0
+    const totalReviews = biz.review_count || biz.reviewsCount || biz.totalReviews || 0
 
+    // Fotos: la API nueva usa photos_sample
     let photo = ''
-    if (biz.photoUrl) photo = biz.photoUrl
-    else if (biz.photos?.[0]) {
+    if (biz.photos_sample?.[0]) {
+      photo = biz.photos_sample[0].photo_url || ''
+    } else if (biz.photoUrl) {
+      photo = biz.photoUrl
+    } else if (biz.photos?.[0]) {
       photo = typeof biz.photos[0] === 'string'
         ? biz.photos[0]
         : biz.photos[0]?.url || biz.photos[0]?.photoUrl || ''
     }
 
-    const mapsUrl = biz.googleMapsUri || biz.url || biz.website || '#'
+    const mapsUrl = biz.place_link || biz.googleMapsUri || biz.url || '#'
+
+    // Horarios: working_hours u opening_hours
+    const openingStatus = biz.opening_status || ''
+    const isOpen = openingStatus.includes('Open')
 
     let hours: string | undefined
-    if (biz.workingHours) {
-      hours = typeof biz.workingHours === 'string'
-        ? biz.workingHours
-        : JSON.stringify(biz.workingHours)
-    } else if (biz.hours) {
-      hours = typeof biz.hours === 'string' ? biz.hours : JSON.stringify(biz.hours)
+    if (biz.working_hours) {
+      hours = typeof biz.working_hours === 'string'
+        ? biz.working_hours
+        : JSON.stringify(biz.working_hours)
+    } else if (biz.opening_hours) {
+      hours = biz.opening_hours
     }
 
     return {
@@ -266,9 +280,9 @@ async function searchRapidAPI(query: string, apiKey: string, host: string): Prom
       url: mapsUrl,
       source: 'google_places',
       photo: photo || undefined,
-      phone: biz.phone || biz.phoneNumber || undefined,
-      website: biz.website || biz.siteWeb || undefined,
-      openNow: biz.openNow ?? biz.opened?.now ?? undefined,
+      phone: biz.phone_number || biz.phone || undefined,
+      website: biz.website || undefined,
+      openNow: isOpen || undefined,
       hours,
     } as BusinessResult
   })
