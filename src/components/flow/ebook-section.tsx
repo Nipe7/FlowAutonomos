@@ -82,7 +82,7 @@ export default function EbookSection() {
 
           {/* Buy button — orange border style */}
           <a
-            href="https://go.hotmart.com/M105158609F?utm_source=flowautonomos&utm_medium=web"
+            href="https://go.hotmart.com/M105158609F?utm_source=flowautonomos&amp;utm_medium=web"
             target="_blank"
             rel="noopener noreferrer nofollow"
             className="hero-btn hero-btn-orange inline-block no-underline"
