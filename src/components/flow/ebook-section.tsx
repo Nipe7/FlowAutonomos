@@ -82,14 +82,17 @@ export default function EbookSection() {
 
           {/* Buy button — orange border style */}
           <a
-            href="https://go.hotmart.com/M105158609F"
+            href="https://go.hotmart.com/M105158609F?utm_source=flowautonomos&utm_medium=web"
             target="_blank"
-            rel="noopener noreferrer"
+            rel="noopener noreferrer nofollow"
             className="hero-btn hero-btn-orange inline-block no-underline"
             style={{ fontFamily: 'var(--font-oswald), Oswald, sans-serif' }}
           >
             Comprar por 9,99€
           </a>
+          <p style={{ fontFamily: 'var(--font-inter), Inter, sans-serif', fontSize: '0.7rem', color: 'rgba(234,236,238,0.3)', marginTop: '12px' }}>
+            Si el enlace no abre, visita: hotmart.com y busca &quot;El desfibrilador del autónomo&quot;
+          </p>
         </motion.div>
       </div>
 

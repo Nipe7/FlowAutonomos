@@ -11,11 +11,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Por favor, indica tu sector.' }, { status: 400 })
     }
 
-    // Soportar Anthropic (CLAUDE_API_KEY o ANTHROPIC_API_KEY) y Groq (GROQ_API_KEY)
     const anthropicKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY
     const groqKey = process.env.GROQ_API_KEY
     const apiKey = anthropicKey || groqKey
-    const useAnthropic = !!anthropicKey
 
     if (!apiKey) {
       return NextResponse.json({
@@ -24,39 +22,32 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const prompt = `Eres consultor de sinergias para autónomos en España.
-Negocio: ${nombre || '-'} | Sector: ${sector} | Zona: ${zona || '-'}
-${descripcion ? `Descripción: ${descripcion}` : ''}
+    // Prompt ultra-corto para velocidad
+    const prompt = `Negocio:${nombre||'-'} Sector:${sector} Zona:${zona||'-'} ${descripcion||''}
+Da 6 sinergias: 3 convencionales + 3 disruptivas.
+JSON: {"suggestions":[{"type":"convencional","businessType":"floristeria","text":"Colabora con..."},...]}`
+    const systemMsg = 'Responde SOLO JSON sin markdown ni backticks. Sé breve.'
 
-Sugiere 3 sinergias CONVENCIONALES y 3 DISRUPTIVAS.
-Para cada una indica:
-- "type": "convencional" o "disruptiva"
-- "businessType": tipo de negocio en 1-2 palabras (ej: "floristería", "gimnasio")
-- "text": descripción concreta de la acción conjunta
-
-JSON sin markdown ni backticks:
-{"suggestions":[{"type":"convencional","businessType":"...","text":"..."}, ...]}`
-
-    // Timeout de 8s para dejar margen dentro del límite de 10s de Netlify
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 8000)
 
     try {
       let content = ''
 
-      if (useAnthropic) {
-        // === Anthropic (Claude) ===
+      if (anthropicKey) {
         const response = await fetch(ANTHROPIC_API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey,
+            'x-api-key': anthropicKey,
             'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 800,
+            model: 'claude-haiku-4-5-20241022',
+            max_tokens: 500,
             messages: [{ role: 'user', content: prompt }],
+            system: systemMsg,
           }),
           signal: controller.signal,
         })
@@ -64,48 +55,40 @@ JSON sin markdown ni backticks:
 
         if (!response.ok) {
           const errBody = await response.text()
-          console.error('Anthropic synergies error:', response.status, errBody)
-          if (response.status === 401) return NextResponse.json({ errorFriendly: 'La clave de IA no es válida. Contacta con soporte.', suggestions: null })
-          if (response.status === 429) return NextResponse.json({ errorFriendly: 'La IA está ocupada. Prueba en unos segundos.', suggestions: null })
-          return NextResponse.json({ errorFriendly: 'No se pudo generar sugerencias. Prueba de nuevo.', suggestions: null })
+          console.error('Anthropic syn error:', response.status, errBody.substring(0, 200))
+          if (response.status === 401) return NextResponse.json({ errorFriendly: 'Clave de IA no válida.', suggestions: null })
+          if (response.status === 429) return NextResponse.json({ errorFriendly: 'IA ocupada. Prueba en unos segundos.', suggestions: null })
+          if (response.status === 529) return NextResponse.json({ errorFriendly: 'IA sobrecargada. Prueba en 30s.', suggestions: null })
+          return NextResponse.json({ errorFriendly: 'Error de IA. Prueba de nuevo.', suggestions: null })
         }
-
         const data = await response.json()
         content = data.content?.[0]?.text || ''
+
       } else {
-        // === Groq (OpenAI-compatible) ===
         const response = await fetch(GROQ_API_URL, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
           body: JSON.stringify({
             model: 'llama-3.3-70b-versatile',
             messages: [
-              { role: 'system', content: 'Responde SOLO con JSON válido, sin markdown ni backticks.' },
+              { role: 'system', content: systemMsg },
               { role: 'user', content: prompt },
             ],
-            temperature: 0.8,
-            max_tokens: 800,
+            temperature: 0.8, max_tokens: 600,
           }),
           signal: controller.signal,
         })
         clearTimeout(timeoutId)
 
         if (!response.ok) {
-          const errBody = await response.text()
-          console.error('Groq synergies error:', response.status, errBody)
-          if (response.status === 401 || response.status === 403) return NextResponse.json({ errorFriendly: 'La clave de IA no es válida. Contacta con soporte.', suggestions: null })
-          if (response.status === 429) return NextResponse.json({ errorFriendly: 'La IA ha alcanzado su límite. Prueba en unos minutos.', suggestions: null })
-          return NextResponse.json({ errorFriendly: 'No se pudo generar sugerencias. Prueba de nuevo.', suggestions: null })
+          console.error('Groq syn error:', response.status)
+          return NextResponse.json({ errorFriendly: 'Error de IA. Prueba de nuevo.', suggestions: null })
         }
-
         const data = await response.json()
         content = data.choices?.[0]?.message?.content || ''
       }
 
-      // Extraer JSON del contenido
+      // Parsear JSON
       try {
         const match = content.match(/\{[\s\S]*\}/)
         if (match) {
@@ -114,7 +97,7 @@ JSON sin markdown ni backticks:
         }
       } catch { /* fallback */ }
 
-      // Fallback: crear sugerencias a partir del texto
+      // Fallback
       const lines = content.split('\n').filter((l: string) => l.trim().length > 0).slice(0, 6)
       return NextResponse.json({
         suggestions: lines.map((line: string, i: number) => ({
@@ -126,11 +109,11 @@ JSON sin markdown ni backticks:
 
     } catch (err: any) {
       clearTimeout(timeoutId)
-      console.error('Synergies timeout/error:', err.message)
+      console.error('Synergies timeout:', err.message)
       return NextResponse.json({ errorFriendly: 'La IA tardó demasiado. Prueba de nuevo.', suggestions: null })
     }
   } catch (err: any) {
-    console.error('Suggest synergies error:', err.message)
+    console.error('Synergies error:', err.message)
     return NextResponse.json({ errorFriendly: 'Error inesperado. Prueba de nuevo.', suggestions: null })
   }
 }
