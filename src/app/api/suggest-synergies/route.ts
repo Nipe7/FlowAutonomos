@@ -18,13 +18,12 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const userPrompt = `Negocio: ${nombre || '-'} | Sector: ${sector} | Zona: ${zona || '-'} | ${descripcion || ''}
+    const userMessage = `Negocio: ${nombre || '-'} | Sector: ${sector} | Zona: ${zona || '-'} ${descripcion ? '| Notas: ' + descripcion : ''}`
 
-Da 6 sinergias de negocio: 3 convencionales + 3 disruptivas.
-Responde SOLO en JSON válido sin markdown ni backticks:
-{"suggestions":[{"type":"convencional","businessType":"tipo de negocio","text":"descripcion de la sinergia"},{"type":"disruptiva","businessType":"tipo de negocio","text":"descripcion de la sinergia"}]}`
-
-    const systemPrompt = 'Eres un experto en estrategias de negocio para autónomos en España. Genera ideas creativas y prácticas de colaboración. Responde SOLO JSON, sin markdown ni backticks.'
+    const systemPrompt = `Eres un experto en estrategias de negocio para autonomos en Espana.
+IMPORTANTE: Responde EXCLUSIVAMENTE con un objeto JSON, sin ningun texto adicional antes ni despues. No uses markdown ni backticks.
+El JSON debe tener exactamente esta estructura con 6 sugerencias (3 convencionales + 3 disruptivas):
+{"suggestions":[{"type":"convencional","businessType":"tipo de negocio","text":"descripcion breve de la sinergia"},{"type":"convencional","businessType":"tipo de negocio","text":"descripcion breve"},{"type":"convencional","businessType":"tipo de negocio","text":"descripcion breve"},{"type":"disruptiva","businessType":"tipo de negocio","text":"descripcion breve"},{"type":"disruptiva","businessType":"tipo de negocio","text":"descripcion breve"},{"type":"disruptiva","businessType":"tipo de negocio","text":"descripcion breve"}]}`
 
     try {
       const response = await fetch(PR_LABS_URL, {
@@ -35,22 +34,21 @@ Responde SOLO en JSON válido sin markdown ni backticks:
           'x-rapidapi-host': 'chatgpt-42.p.rapidapi.com',
         },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: userPrompt }],
+          messages: [{ role: 'user', content: userMessage }],
           system_prompt: systemPrompt,
-          temperature: 0.8,
-          max_tokens: 600,
+          temperature: 0.7,
+          max_tokens: 500,
         }),
       })
 
       if (!response.ok) {
-        const errBody = await response.text()
-        console.error('AI syn error:', response.status, errBody.substring(0, 300))
+        console.error('AI syn error:', response.status)
         return NextResponse.json({ errorFriendly: 'Error de IA. Prueba de nuevo.', suggestions: null })
       }
 
       const data = await response.json()
-      const content = data?.result || data?.response || data?.message || ''
-      const textContent = typeof content === 'string' ? content : JSON.stringify(content)
+      const raw = data?.result || ''
+      const textContent = typeof raw === 'string' ? raw : JSON.stringify(raw)
 
       // Extraer JSON de la respuesta
       try {
@@ -58,18 +56,23 @@ Responde SOLO en JSON válido sin markdown ni backticks:
         if (match) {
           const parsed = JSON.parse(match[0])
           if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-            return NextResponse.json({ suggestions: parsed.suggestions })
+            const cleaned = parsed.suggestions.map((s: any) => ({
+              type: s.type || (parsed.suggestions.indexOf(s) < 3 ? 'convencional' : 'disruptiva'),
+              businessType: String(s.businessType || ''),
+              text: String(s.text || '').substring(0, 200),
+            }))
+            return NextResponse.json({ suggestions: cleaned.slice(0, 6) })
           }
         }
       } catch { /* fallback below */ }
 
-      // Fallback: parsear el texto si no devuelve JSON válido
-      const lines = textContent.split('\n').filter((l: string) => l.trim().length > 0).slice(0, 6)
+      // Fallback: parsear el texto línea por línea
+      const lines = textContent.split('\n').filter((l: string) => l.trim().length > 10).slice(0, 6)
       return NextResponse.json({
         suggestions: lines.map((line: string, i: number) => ({
           type: i < 3 ? 'convencional' : 'disruptiva',
           businessType: '',
-          text: line.replace(/^[-*\d.)\s]+/, '').trim(),
+          text: line.replace(/^[-*\d.)\s]+/, '').trim().substring(0, 200),
         }))
       })
 

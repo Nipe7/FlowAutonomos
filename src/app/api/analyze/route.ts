@@ -21,14 +21,12 @@ export async function POST(req: NextRequest) {
     }
     const pNote = platform && platformInfo[platform] ? `Plataforma: ${platformInfo[platform]}.` : ''
 
-    const systemPrompt = `Eres Analista Flow, experta en Social Media para autónomos en España. ${pNote}
-Responde SOLO en JSON válido sin markdown ni backticks:
-{"summary":"diagnostico en 2 frases","keyPoints":["punto1","punto2","punto3"],"recommendations":["recomendacion1","recomendacion2","recomendacion3"]}`
+    const userMessage = text || '(solo imagen)'
 
-    const userMessage = `Analiza este post de redes sociales:
-"${text || '(solo imagen)'}"
-
-Proporciona un análisis breve y útil.`
+    const systemPrompt = `Eres Analista Flow, experta en Social Media para autonomos en Espana. ${pNote}
+IMPORTANTE: Responde EXCLUSIVAMENTE con un objeto JSON, sin ningun texto adicional antes ni despues. No uses markdown ni backticks.
+El JSON debe tener exactamente esta estructura:
+{"summary":"diagnostico breve en maximo 2 frases","keyPoints":["punto clave 1","punto clave 2","punto clave 3"],"recommendations":["recomendacion 1","recomendacion 2","recomendacion 3"]}`
 
     try {
       const response = await fetch(PR_LABS_URL, {
@@ -41,20 +39,19 @@ Proporciona un análisis breve y útil.`
         body: JSON.stringify({
           messages: [{ role: 'user', content: userMessage }],
           system_prompt: systemPrompt,
-          temperature: 0.7,
-          max_tokens: 500,
+          temperature: 0.3,
+          max_tokens: 300,
         }),
       })
 
       if (!response.ok) {
-        const errBody = await response.text()
-        console.error('AI error:', response.status, errBody.substring(0, 300))
+        console.error('AI error:', response.status)
         return NextResponse.json({ errorFriendly: 'Error de IA. Prueba de nuevo.' })
       }
 
       const data = await response.json()
-      const content = data?.result || data?.response || data?.message || ''
-      const textContent = typeof content === 'string' ? content : JSON.stringify(content)
+      const raw = data?.result || ''
+      const textContent = typeof raw === 'string' ? raw : JSON.stringify(raw)
 
       // Extraer JSON de la respuesta
       let parsed: any = null
@@ -63,18 +60,26 @@ Proporciona un análisis breve y útil.`
         if (match) parsed = JSON.parse(match[0])
       } catch { parsed = null }
 
-      if (!parsed || !parsed.summary) {
-        // Si no devuelve JSON válido, crear un análisis a partir del texto
-        const lines = textContent.split('\n').filter((l: string) => l.trim().length > 0)
+      if (!parsed || !parsed.summary || !Array.isArray(parsed.keyPoints)) {
+        // Fallback: construir resultado desde el texto
+        const sentences = textContent.split(/[.!?]\s*/).filter((s: string) => s.trim().length > 10)
         parsed = {
-          summary: textContent.substring(0, 200),
-          keyPoints: lines.slice(0, 3).map((l: string) => l.replace(/^[-*\d.)\s]+/, '').trim()).filter(Boolean),
-          recommendations: lines.slice(3, 6).map((l: string) => l.replace(/^[-*\d.)\s]+/, '').trim()).filter(Boolean).length > 0
-            ? lines.slice(3, 6).map((l: string) => l.replace(/^[-*\d.)\s]+/, '').trim())
-            : ['Añade más detalles sobre tu producto o servicio', 'Incluye una llamada a la acción clara', 'Usa hashtags relevantes para mayor alcance']
+          summary: sentences.slice(0, 2).join('. ').substring(0, 200),
+          keyPoints: sentences.slice(2, 5).map((s: string) => s.trim().substring(0, 100)).filter(Boolean),
+          recommendations: [
+            'Incluye una llamada a la acción clara',
+            'Añade hashtags relevantes para mayor alcance',
+            'Publica en horarios de mayor audiencia'
+          ]
         }
       }
-      return NextResponse.json(parsed)
+
+      // Limpiar: asegurar que los valores son strings cortos
+      return NextResponse.json({
+        summary: String(parsed.summary || '').substring(0, 300),
+        keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.map(String).slice(0, 5) : [],
+        recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.map(String).slice(0, 5) : [],
+      })
 
     } catch (err: any) {
       console.error('Analyze error:', err.message)
