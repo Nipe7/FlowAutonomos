@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const PR_LABS_URL = 'https://chatgpt-42.p.rapidapi.com/gpt4o'
-const RAPID_API_KEY = process.env.RAPIDAPI_KEY
+const GEMINI_MODEL = 'gemini-2.0-flash'
+const GEMINI_BASE = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
+const GEMINI_KEY = process.env.GEMINI_API_KEY
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Proporciona texto o una imagen.' }, { status: 400 })
     }
 
-    if (!RAPID_API_KEY) {
+    if (!GEMINI_KEY) {
       return NextResponse.json({ errorFriendly: 'La IA no está configurada todavía.' })
     }
 
@@ -21,48 +22,47 @@ export async function POST(req: NextRequest) {
     }
     const pNote = platform && platformInfo[platform] ? `Plataforma: ${platformInfo[platform]}.` : ''
 
-    const userMessage = text || '(solo imagen)'
+    const prompt = `${pNote}Analiza este post de redes sociales y responde SOLO en JSON valido con esta estructura exacta:
+{"summary":"diagnostico breve en maximo 2 frases","keyPoints":["punto clave 1","punto clave 2","punto clave 3"],"recommendations":["recomendacion 1","recomendacion 2","recomendacion 3"]}
 
-    const systemPrompt = `Eres Analista Flow, experta en Social Media para autonomos en Espana. ${pNote}
-IMPORTANTE: Responde EXCLUSIVAMENTE con un objeto JSON, sin ningun texto adicional antes ni despues. No uses markdown ni backticks.
-El JSON debe tener exactamente esta estructura:
-{"summary":"diagnostico breve en maximo 2 frases","keyPoints":["punto clave 1","punto clave 2","punto clave 3"],"recommendations":["recomendacion 1","recomendacion 2","recomendacion 3"]}`
+Post a analizar:
+"${text || '(solo imagen)'}"
+
+No incluyas ningun texto fuera del JSON.`
 
     try {
-      const response = await fetch(PR_LABS_URL, {
+      const response = await fetch(`${GEMINI_BASE}?key=${GEMINI_KEY}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-rapidapi-key': RAPID_API_KEY,
-          'x-rapidapi-host': 'chatgpt-42.p.rapidapi.com',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: userMessage }],
-          system_prompt: systemPrompt,
-          temperature: 0.3,
-          max_tokens: 300,
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 400,
+            responseMimeType: 'application/json',
+          },
         }),
       })
 
       if (!response.ok) {
-        console.error('AI error:', response.status)
+        const errBody = await response.text()
+        console.error('Gemini error:', response.status, errBody.substring(0, 200))
+        if (response.status === 429) return NextResponse.json({ errorFriendly: 'IA ocupada. Prueba en unos segundos.' })
         return NextResponse.json({ errorFriendly: 'Error de IA. Prueba de nuevo.' })
       }
 
       const data = await response.json()
-      const raw = data?.result || ''
-      const textContent = typeof raw === 'string' ? raw : JSON.stringify(raw)
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
 
       // Extraer JSON de la respuesta
       let parsed: any = null
       try {
-        const match = textContent.match(/\{[\s\S]*\}/)
+        const match = rawText.match(/\{[\s\S]*\}/)
         if (match) parsed = JSON.parse(match[0])
       } catch { parsed = null }
 
       if (!parsed || !parsed.summary || !Array.isArray(parsed.keyPoints)) {
-        // Fallback: construir resultado desde el texto
-        const sentences = textContent.split(/[.!?]\s*/).filter((s: string) => s.trim().length > 10)
+        const sentences = rawText.split(/[.!?]\s*/).filter((s: string) => s.trim().length > 10)
         parsed = {
           summary: sentences.slice(0, 2).join('. ').substring(0, 200),
           keyPoints: sentences.slice(2, 5).map((s: string) => s.trim().substring(0, 100)).filter(Boolean),
@@ -74,7 +74,6 @@ El JSON debe tener exactamente esta estructura:
         }
       }
 
-      // Limpiar: asegurar que los valores son strings cortos
       return NextResponse.json({
         summary: String(parsed.summary || '').substring(0, 300),
         keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.map(String).slice(0, 5) : [],
