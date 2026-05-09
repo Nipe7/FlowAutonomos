@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const PR_LABS_URL = 'https://chatgpt-42.p.rapidapi.com/matag2'
+const PR_LABS_URL = 'https://chatgpt-42.p.rapidapi.com/gpt4o'
 const RAPID_API_KEY = process.env.RAPIDAPI_KEY
 
 export async function POST(req: NextRequest) {
@@ -19,13 +19,12 @@ export async function POST(req: NextRequest) {
     }
 
     const userPrompt = `Negocio: ${nombre || '-'} | Sector: ${sector} | Zona: ${zona || '-'} | ${descripcion || ''}
-Da 6 sinergias: 3 convencionales + 3 disruptivas.
-Responde SOLO JSON: {"suggestions":[{"type":"convencional","businessType":"floristeria","text":"Colabora con..."},...]}`
 
-    const systemPrompt = 'Eres un experto en estrategias de negocio para autónomos en España. Responde SOLO JSON sin markdown ni backticks. Breve.'
+Da 6 sinergias de negocio: 3 convencionales + 3 disruptivas.
+Responde SOLO en JSON válido sin markdown ni backticks:
+{"suggestions":[{"type":"convencional","businessType":"tipo de negocio","text":"descripcion de la sinergia"},{"type":"disruptiva","businessType":"tipo de negocio","text":"descripcion de la sinergia"}]}`
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 15000)
+    const systemPrompt = 'Eres un experto en estrategias de negocio para autónomos en España. Genera ideas creativas y prácticas de colaboración. Responde SOLO JSON, sin markdown ni backticks.'
 
     try {
       const response = await fetch(PR_LABS_URL, {
@@ -39,30 +38,32 @@ Responde SOLO JSON: {"suggestions":[{"type":"convencional","businessType":"flori
           messages: [{ role: 'user', content: userPrompt }],
           system_prompt: systemPrompt,
           temperature: 0.8,
-          max_tokens: 500,
+          max_tokens: 600,
         }),
-        signal: controller.signal,
       })
-      clearTimeout(timeoutId)
 
       if (!response.ok) {
         const errBody = await response.text()
-        console.error('PR Labs syn error:', response.status, errBody.substring(0, 300))
+        console.error('AI syn error:', response.status, errBody.substring(0, 300))
         return NextResponse.json({ errorFriendly: 'Error de IA. Prueba de nuevo.', suggestions: null })
       }
 
       const data = await response.json()
-      const content = data?.chat_response || data?.response || data?.message || data?.choices?.[0]?.message?.content || ''
+      const content = data?.result || data?.response || data?.message || ''
       const textContent = typeof content === 'string' ? content : JSON.stringify(content)
 
+      // Extraer JSON de la respuesta
       try {
         const match = textContent.match(/\{[\s\S]*\}/)
         if (match) {
           const parsed = JSON.parse(match[0])
-          if (parsed.suggestions) return NextResponse.json({ suggestions: parsed.suggestions })
+          if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+            return NextResponse.json({ suggestions: parsed.suggestions })
+          }
         }
       } catch { /* fallback below */ }
 
+      // Fallback: parsear el texto si no devuelve JSON válido
       const lines = textContent.split('\n').filter((l: string) => l.trim().length > 0).slice(0, 6)
       return NextResponse.json({
         suggestions: lines.map((line: string, i: number) => ({
@@ -73,8 +74,7 @@ Responde SOLO JSON: {"suggestions":[{"type":"convencional","businessType":"flori
       })
 
     } catch (err: any) {
-      clearTimeout(timeoutId)
-      console.error('Synergies timeout:', err.message)
+      console.error('Synergies error:', err.message)
       return NextResponse.json({ errorFriendly: 'La IA tardó demasiado. Prueba de nuevo.', suggestions: null })
     }
   } catch (err: any) {
