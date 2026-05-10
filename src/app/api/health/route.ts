@@ -1,38 +1,28 @@
 import { NextResponse } from 'next/server'
+import ZAI from 'z-ai-web-dev-sdk'
 
 export async function GET() {
-  const geminiKey = process.env.GEMINI_API_KEY
   const rapidKey = process.env.RAPIDAPI_KEY
 
-  let geminiTest = { ok: false, status: null, error: null, latency_ms: null }
-  if (geminiKey) {
-    const start = Date.now()
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'Responde solo: OK' }] }],
-          generationConfig: { maxOutputTokens: 10 },
-        }),
-      })
-      geminiTest.latency_ms = Date.now() - start
-      geminiTest.status = response.status
-      geminiTest.ok = response.ok
-      if (!response.ok) {
-        const err = await response.text()
-        geminiTest.error = err.substring(0, 200)
-      }
-    } catch (err: any) {
-      geminiTest.latency_ms = Date.now() - start
-      geminiTest.error = err.message
-    }
+  let aiTest = { ok: false, status: null, error: null, latency_ms: null }
+  const start = Date.now()
+  try {
+    const zai = await ZAI.create()
+    const completion = await zai.chat.completions.create({
+      messages: [{ role: 'user', content: 'Responde solo: OK' }],
+      max_tokens: 5,
+    })
+    aiTest.latency_ms = Date.now() - start
+    aiTest.ok = !!completion.choices?.[0]?.message?.content
+    aiTest.status = 200
+  } catch (err: any) {
+    aiTest.latency_ms = Date.now() - start
+    aiTest.error = err.message
   }
 
   return NextResponse.json({
-    ai_provider: geminiKey ? 'gemini' : 'NONE', // v2
-    gemini_set: !!geminiKey,
-    gemini_test: geminiTest,
+    ai_provider: 'z-ai-web-dev-sdk',
+    ai_test: aiTest,
     rapidapi_set: !!rapidKey,
   })
 }

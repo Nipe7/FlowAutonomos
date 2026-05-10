@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-const GEMINI_MODEL = 'gemini-2.0-flash'
-const GEMINI_BASE = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
-const GEMINI_KEY = process.env.GEMINI_API_KEY
+import ZAI from 'z-ai-web-dev-sdk'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,13 +7,6 @@ export async function POST(req: NextRequest) {
 
     if (!sector) {
       return NextResponse.json({ error: 'Por favor, indica tu sector.' }, { status: 400 })
-    }
-
-    if (!GEMINI_KEY) {
-      return NextResponse.json({
-        errorFriendly: 'La IA no está configurada todavía.',
-        suggestions: null,
-      })
     }
 
     const prompt = `Eres un experto en estrategias de negocio para autonomos en Espana.
@@ -32,28 +22,17 @@ ${descripcion ? '- Notas: ' + descripcion : ''}
 No incluyas ningun texto fuera del JSON.`
 
     try {
-      const response = await fetch(`${GEMINI_BASE}?key=${GEMINI_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.8,
-            maxOutputTokens: 600,
-            responseMimeType: 'application/json',
-          },
-        }),
+      const zai = await ZAI.create()
+      const completion = await zai.chat.completions.create({
+        messages: [
+          { role: 'system', content: 'Eres un experto en estrategias de negocio para autonomos en Espana. Responde siempre en JSON valido, sin texto adicional.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.8,
+        max_tokens: 600,
       })
 
-      if (!response.ok) {
-        const errBody = await response.text()
-        console.error('Gemini syn error:', response.status, errBody.substring(0, 200))
-        if (response.status === 429) return NextResponse.json({ errorFriendly: 'IA ocupada. Prueba en unos segundos.', suggestions: null })
-        return NextResponse.json({ errorFriendly: 'Error de IA. Prueba de nuevo.', suggestions: null })
-      }
-
-      const data = await response.json()
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const rawText = completion.choices[0]?.message?.content || ''
 
       // Extraer JSON de la respuesta
       try {
