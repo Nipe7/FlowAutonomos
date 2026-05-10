@@ -30,7 +30,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    ai_provider: geminiKey ? 'gemini' : 'NONE',
+    ai_provider: geminiKey ? 'gemini' : 'NONE', // v2
     gemini_set: !!geminiKey,
     gemini_test: geminiTest,
     rapidapi_set: !!rapidKey,
