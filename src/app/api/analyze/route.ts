@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import ZAI from 'z-ai-web-dev-sdk'
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,48 +10,44 @@ export async function POST(req: NextRequest) {
 
     const platformInfo: Record<string, string> = {
       instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook',
-      linkedin: 'LinkedIn', x: 'X/Twitter'
+      linkedin: 'X/Twitter'
     }
     const pNote = platform && platformInfo[platform] ? `Plataforma: ${platformInfo[platform]}.` : ''
 
-    const prompt = `${pNote}Analiza este post de redes sociales y responde SOLO en JSON valido con esta estructura exacta:
-{"summary":"diagnostico breve en maximo 2 frases","keyPoints":["punto clave 1","punto clave 2","punto clave 3"],"recommendations":["recomendacion 1","recomendacion 2","recomendacion 3"]}
+    const userPrompt = `${pNote}Analiza este post y da solo JSON:
+{"summary":"2 frases max","keyPoints":["p1","p2","p3"],"recommendations":["r1","r2","r3"]}
 
-Post a analizar:
-"${text || '(solo imagen)'}"
-
-No incluyas ningun texto fuera del JSON.`
+Post: "${(text || '').substring(0, 500)}"`
 
     try {
-      const zai = await ZAI.create()
+      // Importar dinámicamente para evitar problemas de bundle
+      const ZAI = (await import('z-ai-web-dev-sdk')).default || (await import('z-ai-web-dev-sdk'))
+      const createFn = typeof ZAI === 'function' ? ZAI : ZAI.default || ZAI.create
+      const zai = await createFn()
+
       const completion = await zai.chat.completions.create({
         messages: [
-          { role: 'system', content: 'Eres un experto en marketing de redes sociales. Responde siempre en JSON valido, sin texto adicional.' },
-          { role: 'user', content: prompt }
+          { role: 'system', content: 'Responde SOLO en JSON valido. Sin texto adicional.' },
+          { role: 'user', content: userPrompt }
         ],
         temperature: 0.4,
-        max_tokens: 400,
+        max_tokens: 300,
       })
 
       const rawText = completion.choices[0]?.message?.content || ''
 
-      // Extraer JSON de la respuesta
       let parsed: any = null
       try {
         const match = rawText.match(/\{[\s\S]*\}/)
         if (match) parsed = JSON.parse(match[0])
       } catch { parsed = null }
 
-      if (!parsed || !parsed.summary || !Array.isArray(parsed.keyPoints)) {
+      if (!parsed || !parsed.summary) {
         const sentences = rawText.split(/[.!?]\s*/).filter((s: string) => s.trim().length > 10)
         parsed = {
           summary: sentences.slice(0, 2).join('. ').substring(0, 200),
           keyPoints: sentences.slice(2, 5).map((s: string) => s.trim().substring(0, 100)).filter(Boolean),
-          recommendations: [
-            'Incluye una llamada a la acción clara',
-            'Añade hashtags relevantes para mayor alcance',
-            'Publica en horarios de mayor audiencia'
-          ]
+          recommendations: ['Incluye una llamada a la acción clara', 'Añade hashtags relevantes', 'Publica en horarios de mayor audiencia']
         }
       }
 
@@ -63,8 +58,8 @@ No incluyas ningun texto fuera del JSON.`
       })
 
     } catch (err: any) {
-      console.error('Analyze error:', err.message)
-      return NextResponse.json({ errorFriendly: 'La IA tardó demasiado. Prueba de nuevo.' })
+      console.error('Analyze AI error:', err.message, err.stack?.substring(0, 300))
+      return NextResponse.json({ errorFriendly: 'La IA tardó demasiado. Prueba de nuevo.', debug: err.message })
     }
   } catch (err: any) {
     console.error('Analyze error:', err.message)

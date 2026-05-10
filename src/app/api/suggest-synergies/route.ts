@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import ZAI from 'z-ai-web-dev-sdk'
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,32 +8,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Por favor, indica tu sector.' }, { status: 400 })
     }
 
-    const prompt = `Eres un experto en estrategias de negocio para autonomos en Espana.
-Genera 6 sinergias de negocio para este negocio:
-- Nombre: ${nombre || '-'}
+    const userPrompt = `Genera 6 sinergias para:
 - Sector: ${sector}
+- Nombre: ${nombre || '-'}
 - Zona: ${zona || '-'}
 ${descripcion ? '- Notas: ' + descripcion : ''}
 
-3 convencionales + 3 disruptivas. Responde SOLO en JSON valido:
-{"suggestions":[{"type":"convencional","businessType":"tipo de negocio","text":"descripcion breve de la sinergia"},{"type":"convencional","businessType":"tipo de negocio","text":"descripcion breve"},{"type":"convencional","businessType":"tipo de negocio","text":"descripcion breve"},{"type":"disruptiva","businessType":"tipo de negocio","text":"descripcion breve"},{"type":"disruptiva","businessType":"tipo de negocio","text":"descripcion breve"},{"type":"disruptiva","businessType":"tipo de negocio","text":"descripcion breve"}]}
-
-No incluyas ningun texto fuera del JSON.`
+3 convencionales + 3 disruptivas. Solo JSON:
+{"suggestions":[{"type":"convencional","businessType":"tipo","text":"desc"},{"type":"disruptiva","businessType":"tipo","text":"desc"}]}`
 
     try {
-      const zai = await ZAI.create()
+      // Importar dinámicamente
+      const ZAI = (await import('z-ai-web-dev-sdk')).default || (await import('z-ai-web-dev-sdk'))
+      const createFn = typeof ZAI === 'function' ? ZAI : ZAI.default || ZAI.create
+      const zai = await createFn()
+
       const completion = await zai.chat.completions.create({
         messages: [
-          { role: 'system', content: 'Eres un experto en estrategias de negocio para autonomos en Espana. Responde siempre en JSON valido, sin texto adicional.' },
-          { role: 'user', content: prompt }
+          { role: 'system', content: 'Responde SOLO en JSON valido. Sin texto adicional.' },
+          { role: 'user', content: userPrompt }
         ],
         temperature: 0.8,
-        max_tokens: 600,
+        max_tokens: 500,
       })
 
       const rawText = completion.choices[0]?.message?.content || ''
 
-      // Extraer JSON de la respuesta
       try {
         const match = rawText.match(/\{[\s\S]*\}/)
         if (match) {
@@ -50,7 +49,6 @@ No incluyas ningun texto fuera del JSON.`
         }
       } catch { /* fallback below */ }
 
-      // Fallback: parsear texto
       const lines = rawText.split('\n').filter((l: string) => l.trim().length > 10).slice(0, 6)
       return NextResponse.json({
         suggestions: lines.map((line: string, i: number) => ({
@@ -61,8 +59,8 @@ No incluyas ningun texto fuera del JSON.`
       })
 
     } catch (err: any) {
-      console.error('Synergies error:', err.message)
-      return NextResponse.json({ errorFriendly: 'La IA tardó demasiado. Prueba de nuevo.', suggestions: null })
+      console.error('Synergies AI error:', err.message, err.stack?.substring(0, 300))
+      return NextResponse.json({ errorFriendly: 'La IA tardó demasiado. Prueba de nuevo.', suggestions: null, debug: err.message })
     }
   } catch (err: any) {
     console.error('Synergies error:', err.message)
