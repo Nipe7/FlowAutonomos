@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const GEMINI_MODEL = 'gemini-2.0-flash-lite'
+const GEMINI_MODEL = 'gemini-2.0-flash'
 const GEMINI_BASE = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const GEMINI_KEY = process.env.GEMINI_API_KEY
 
@@ -46,9 +46,11 @@ No incluyas ningun texto fuera del JSON.`
 
       if (!response.ok) {
         const errBody = await response.text()
-        console.error('Gemini error:', response.status, errBody.substring(0, 200))
-        if (response.status === 429) return NextResponse.json({ errorFriendly: 'IA ocupada. Prueba en unos segundos.' })
-        return NextResponse.json({ errorFriendly: 'Error de IA. Prueba de nuevo.' })
+        console.error('Gemini error:', response.status, errBody.substring(0, 500))
+        const errData = JSON.parse(errBody || '{}')
+        const errMsg = errData?.error?.message || errBody.substring(0, 200)
+        if (response.status === 429) return NextResponse.json({ errorFriendly: 'IA ocupada. Prueba en unos segundos.', debug: errMsg })
+        return NextResponse.json({ errorFriendly: 'Error de IA. Prueba de nuevo.', debug: errMsg })
       }
 
       const data = await response.json()
