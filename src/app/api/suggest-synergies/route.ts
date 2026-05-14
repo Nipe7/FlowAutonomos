@@ -64,7 +64,7 @@ ${descripcion ? '- Notas: ' + descripcion : ''}
             'HTTP-Referer': 'https://flowautonomos.netlify.app',
           },
           body: JSON.stringify({
-            model: 'google/gemma-3-27b-it:free',
+            model: 'deepseek/deepseek-v4-flash:free',
             messages,
             temperature: 0.8,
             max_tokens: 500,

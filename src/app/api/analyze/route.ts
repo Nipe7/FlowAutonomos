@@ -66,7 +66,7 @@ Post: "${(text || '').substring(0, 500)}"`
             'HTTP-Referer': 'https://flowautonomos.netlify.app',
           },
           body: JSON.stringify({
-            model: 'google/gemma-3-27b-it:free',
+            model: 'deepseek/deepseek-v4-flash:free',
             messages,
             temperature: 0.4,
             max_tokens: 300,
