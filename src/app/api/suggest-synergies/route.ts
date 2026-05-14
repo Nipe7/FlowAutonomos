@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// OpenRouter: gratuita, sin tarjeta, 200+ req/dia con modelos :free
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY
-
-// Gemini: con config de facturacion en Google Cloud
 const GEMINI_KEY = process.env.GEMINI_API_KEY
+const AI_MODEL = 'google/gemma-4-31b-it:free'
+
+function cleanJSON(rawText: string) {
+  return rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/^[^{]*/, '').replace(/[^}]*$/, '').trim()
+}
 
 function parseSynergiesResponse(rawText: string) {
-  // Limpiar markdown/backticks
-  const clean = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-
   try {
+    const clean = cleanJSON(rawText)
     const match = clean.match(/\{[\s\S]*\}/)
     if (match) {
       const parsed = JSON.parse(match[0])
@@ -25,7 +25,7 @@ function parseSynergiesResponse(rawText: string) {
     }
   } catch { /* fallback */ }
 
-  const lines = clean.split('\n').filter((l: string) => l.trim().length > 10).slice(0, 6)
+  const lines = rawText.split('\n').filter((l: string) => l.trim().length > 10).slice(0, 6)
   return lines.map((line: string, i: number) => ({
     type: i < 3 ? 'convencional' : 'disruptiva',
     businessType: '',
@@ -41,21 +41,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Por favor, indica tu sector.' }, { status: 400 })
     }
 
-    const systemPrompt = 'Eres un experto en estrategias de negocio para autonomos en España. Responde SOLO en JSON valido plano, sin markdown, sin backticks, sin texto antes ni despues.'
-    const userPrompt = `Genera 6 sinergias para:
-- Sector: ${sector}
-- Nombre: ${nombre || '-'}
-- Zona: ${zona || '-'}
-${descripcion ? '- Notas: ' + descripcion : ''}
+    const systemPrompt = `Eres un experto en estrategias de negocio para autonomos en Espana.
+Responde SIEMPRE en espanol. Da ideas concretas y variadas, nunca repetidas.
+JSON: {"suggestions":[{"type":"convencional","businessType":"tipo de negocio","text":"descripcion breve de la sinergia"},...]}`
 
-3 convencionales + 3 disruptivas. Solo JSON:
-{"suggestions":[{"type":"convencional","businessType":"panadería","text":"Colabora con panaderías locales para ofrecer desayunos combinados"},{"type":"disruptiva","businessType":"coworking","text":"Convierte tu cafetería en espacio de coworking por las mañanas"}]}`
+    const userPrompt = `Genera 6 sinergias de negocio (3 convencionales + 3 disruptivas) para:
+- Nombre: ${nombre || '-'}
+- Sector: ${sector}
+- Zona: ${zona || '-'}
+${descripcion ? '- Notas: ' + descripcion : ''}`
+
     const messages = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ]
 
-    // 1. Intentar OpenRouter (gratuito, sin tarjeta)
+    // 1. OpenRouter
     if (OPENROUTER_KEY) {
       try {
         const resp = await fetch(OPENROUTER_URL, {
@@ -66,10 +67,10 @@ ${descripcion ? '- Notas: ' + descripcion : ''}
             'HTTP-Referer': 'https://flowautonomos.netlify.app',
           },
           body: JSON.stringify({
-            model: 'deepseek/deepseek-v4-flash:free',
+            model: AI_MODEL,
             messages,
             temperature: 0.8,
-            max_tokens: 500,
+            max_tokens: 600,
           }),
           signal: AbortSignal.timeout(8000),
         })
@@ -83,7 +84,7 @@ ${descripcion ? '- Notas: ' + descripcion : ''}
       }
     }
 
-    // 2. Intentar Gemini (si tiene API key)
+    // 2. Gemini fallback
     if (GEMINI_KEY) {
       try {
         const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
@@ -91,7 +92,7 @@ ${descripcion ? '- Notas: ' + descripcion : ''}
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-            generationConfig: { temperature: 0.8, maxOutputTokens: 500, responseMimeType: 'application/json' },
+            generationConfig: { temperature: 0.8, maxOutputTokens: 600, responseMimeType: 'application/json' },
           }),
           signal: AbortSignal.timeout(8000),
         })
@@ -105,8 +106,7 @@ ${descripcion ? '- Notas: ' + descripcion : ''}
       }
     }
 
-    return NextResponse.json({ errorFriendly: 'La IA no está disponible en este momento. Prueba de nuevo en unos minutos.', suggestions: null })
-
+    return NextResponse.json({ errorFriendly: 'La IA no está disponible ahora. Prueba en unos minutos.', suggestions: null })
   } catch (err: any) {
     console.error('Synergies error:', err.message)
     return NextResponse.json({ errorFriendly: 'Error inesperado. Prueba de nuevo.', suggestions: null })

@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// OpenRouter: gratuita, sin tarjeta, 200+ req/dia con modelos :free
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY
-
-// Gemini: con config de facturacion en Google Cloud
 const GEMINI_KEY = process.env.GEMINI_API_KEY
+const AI_MODEL = 'google/gemma-4-31b-it:free'
+
+function cleanJSON(rawText: string) {
+  return rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/^[^{]*/, '').replace(/[^}]*$/, '').trim()
+}
 
 function parseAIResponse(rawText: string) {
   let parsed: any = null
   try {
-    const match = rawText.match(/\{[\s\S]*\}/)
+    const clean = cleanJSON(rawText)
+    const match = clean.match(/\{[\s\S]*\}/)
     if (match) parsed = JSON.parse(match[0])
   } catch { parsed = null }
 
@@ -19,7 +22,7 @@ function parseAIResponse(rawText: string) {
     parsed = {
       summary: sentences.slice(0, 2).join('. ').substring(0, 200),
       keyPoints: sentences.slice(2, 5).map((s: string) => s.trim().substring(0, 100)).filter(Boolean),
-      recommendations: ['Incluye una llamada a la acción clara', 'Añade hashtags relevantes', 'Publica en horarios de mayor audiencia']
+      recommendations: ['Incluye una llamada a la acción clara', 'Añade hashtags relevantes para mayor alcance', 'Publica en horarios de mayor audiencia']
     }
   }
 
@@ -44,27 +47,26 @@ export async function POST(req: NextRequest) {
     }
     const pNote = platform && platformInfo[platform] ? `Plataforma: ${platformInfo[platform]}.` : ''
 
-    const userPrompt = `${pNote}Post a analizar:
+    const userPrompt = `${pNote}Analiza este post de redes sociales:
 "${(text || '').substring(0, 800)}"`
 
-    const systemPrompt = `Eres Analista Flow, una experta en marketing de redes sociales para autonomos y pequenos negocios en Espana.
+    const systemPrompt = `Eres Analista Flow, experta en marketing para autonomos en Espana.
+Reglas:
+- NUNCA repitas el texto del post. ANALIZA y ACONSEJA.
+- Si el post es corto o pobre, explica por que no funciona y como mejorarlo.
+- Si el post es bueno, destaca lo positivo y sugiere mejoras.
+- Frases siempre COMPLETAS.
+- Recomendaciones ACCIONABLES y concretas.
+- Responde SIEMPRE en espanol.
 
-REGLAS IMPORTANTES:
-- NUNCA repitas el texto del post. Tu trabajo es ANALIZAR y ACONSEJAR.
-- Si el post es corto, generico o pobre, EXPLICA por que no funciona y sugiere mejoras concretas.
-- Si el post es bueno, destaca lo que hace bien y como mejorarlo aun mas.
-- Las frases deben estar COMPLETAS, nunca cortadas.
-- Las recomendaciones deben ser ACCIONABLES, concretas y utiles.
-- Responde SIEMPRE en espanol. NUNCA respondas en ingles ni en otro idioma.
+JSON: {"summary":"diagnostico en 2-3 frases","keyPoints":["punto1","punto2","punto3"],"recommendations":["rec1","rec2","rec3"]}`
 
-Responde SOLO en JSON valido, sin markdown ni backticks:
-{"summary":"Diagnostico profesional en 2-3 frases completas","keyPoints":["punto clave 1 completo","punto clave 2 completo","punto clave 3 completo"],"recommendations":["recomendacion 1 accionable y completa","recomendacion 2 accionable y completa","recomendacion 3 accionable y completa"]}`
     const messages = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ]
 
-    // 1. Intentar OpenRouter (gratuito, sin tarjeta)
+    // 1. OpenRouter
     if (OPENROUTER_KEY) {
       try {
         const resp = await fetch(OPENROUTER_URL, {
@@ -75,9 +77,9 @@ Responde SOLO en JSON valido, sin markdown ni backticks:
             'HTTP-Referer': 'https://flowautonomos.netlify.app',
           },
           body: JSON.stringify({
-            model: 'deepseek/deepseek-v4-flash:free',
+            model: AI_MODEL,
             messages,
-            temperature: 0.4,
+            temperature: 0.5,
             max_tokens: 500,
           }),
           signal: AbortSignal.timeout(8000),
@@ -92,7 +94,7 @@ Responde SOLO en JSON valido, sin markdown ni backticks:
       }
     }
 
-    // 2. Intentar Gemini (si tiene API key)
+    // 2. Gemini fallback
     if (GEMINI_KEY) {
       try {
         const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
@@ -100,7 +102,7 @@ Responde SOLO en JSON valido, sin markdown ni backticks:
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-            generationConfig: { temperature: 0.4, maxOutputTokens: 500, responseMimeType: 'application/json' },
+            generationConfig: { temperature: 0.5, maxOutputTokens: 500, responseMimeType: 'application/json' },
           }),
           signal: AbortSignal.timeout(8000),
         })
@@ -114,8 +116,7 @@ Responde SOLO en JSON valido, sin markdown ni backticks:
       }
     }
 
-    return NextResponse.json({ errorFriendly: 'La IA no está disponible en este momento. Prueba de nuevo en unos minutos.' })
-
+    return NextResponse.json({ errorFriendly: 'La IA no está disponible ahora. Prueba en unos minutos.' })
   } catch (err: any) {
     console.error('Analyze error:', err.message)
     return NextResponse.json({ errorFriendly: 'Error inesperado. Prueba de nuevo.' })
