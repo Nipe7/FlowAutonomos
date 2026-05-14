@@ -24,7 +24,7 @@ function parseAIResponse(rawText: string) {
   }
 
   return {
-    summary: String(parsed.summary || '').substring(0, 300),
+    summary: String(parsed.summary || '').substring(0, 400),
     keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.map(String).slice(0, 5) : [],
     recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.map(String).slice(0, 5) : [],
   }
@@ -44,12 +44,21 @@ export async function POST(req: NextRequest) {
     }
     const pNote = platform && platformInfo[platform] ? `Plataforma: ${platformInfo[platform]}.` : ''
 
-    const userPrompt = `${pNote}Analiza este post y da solo JSON:
-{"summary":"2 frases max","keyPoints":["p1","p2","p3"],"recommendations":["r1","r2","r3"]}
+    const userPrompt = `${pNote}Post a analizar:
+"${(text || '').substring(0, 800)}"`
 
-Post: "${(text || '').substring(0, 500)}"`
+    const systemPrompt = `Eres Analista Flow, una experta en marketing de redes sociales para autonomos y pequenos negocios en Espana.
 
-    const systemPrompt = 'Responde SOLO en JSON valido. Sin texto adicional.'
+REGLAS IMPORTANTES:
+- NUNCA repitas el texto del post. Tu trabajo es ANALIZAR y ACONSEJAR.
+- Si el post es corto, generico o pobre, EXPLICA por que no funciona y sugiere mejoras concretas.
+- Si el post es bueno, destaca lo que hace bien y como mejorarlo aun mas.
+- Las frases deben estar COMPLETAS, nunca cortadas.
+- Las recomendaciones deben ser ACCIONABLES, concretas y utiles.
+- Responde SIEMPRE en espanol.
+
+Responde SOLO en JSON valido, sin markdown ni backticks:
+{"summary":"Diagnostico profesional en 2-3 frases completas","keyPoints":["punto clave 1 completo","punto clave 2 completo","punto clave 3 completo"],"recommendations":["recomendacion 1 accionable y completa","recomendacion 2 accionable y completa","recomendacion 3 accionable y completa"]}`
     const messages = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
@@ -69,7 +78,7 @@ Post: "${(text || '').substring(0, 500)}"`
             model: 'deepseek/deepseek-v4-flash:free',
             messages,
             temperature: 0.4,
-            max_tokens: 300,
+            max_tokens: 500,
           }),
           signal: AbortSignal.timeout(8000),
         })
@@ -91,7 +100,7 @@ Post: "${(text || '').substring(0, 500)}"`
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-            generationConfig: { temperature: 0.4, maxOutputTokens: 300, responseMimeType: 'application/json' },
+            generationConfig: { temperature: 0.4, maxOutputTokens: 500, responseMimeType: 'application/json' },
           }),
           signal: AbortSignal.timeout(8000),
         })
