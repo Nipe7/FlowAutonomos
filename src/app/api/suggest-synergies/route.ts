@@ -8,8 +8,11 @@ const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY
 const GEMINI_KEY = process.env.GEMINI_API_KEY
 
 function parseSynergiesResponse(rawText: string) {
+  // Limpiar markdown/backticks
+  const clean = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+
   try {
-    const match = rawText.match(/\{[\s\S]*\}/)
+    const match = clean.match(/\{[\s\S]*\}/)
     if (match) {
       const parsed = JSON.parse(match[0])
       if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
@@ -22,7 +25,7 @@ function parseSynergiesResponse(rawText: string) {
     }
   } catch { /* fallback */ }
 
-  const lines = rawText.split('\n').filter((l: string) => l.trim().length > 10).slice(0, 6)
+  const lines = clean.split('\n').filter((l: string) => l.trim().length > 10).slice(0, 6)
   return lines.map((line: string, i: number) => ({
     type: i < 3 ? 'convencional' : 'disruptiva',
     businessType: '',
@@ -38,6 +41,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Por favor, indica tu sector.' }, { status: 400 })
     }
 
+    const systemPrompt = 'Eres un experto en estrategias de negocio para autonomos en España. Responde SOLO en JSON valido plano, sin markdown, sin backticks, sin texto antes ni despues.'
     const userPrompt = `Genera 6 sinergias para:
 - Sector: ${sector}
 - Nombre: ${nombre || '-'}
@@ -45,9 +49,7 @@ export async function POST(req: NextRequest) {
 ${descripcion ? '- Notas: ' + descripcion : ''}
 
 3 convencionales + 3 disruptivas. Solo JSON:
-{"suggestions":[{"type":"convencional","businessType":"tipo","text":"desc"},{"type":"disruptiva","businessType":"tipo","text":"desc"}]}`
-
-    const systemPrompt = 'Responde SOLO en JSON valido. Sin texto adicional.'
+{"suggestions":[{"type":"convencional","businessType":"panadería","text":"Colabora con panaderías locales para ofrecer desayunos combinados"},{"type":"disruptiva","businessType":"coworking","text":"Convierte tu cafetería en espacio de coworking por las mañanas"}]}`
     const messages = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
