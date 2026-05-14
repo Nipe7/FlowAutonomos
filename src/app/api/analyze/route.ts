@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY
 const GEMINI_KEY = process.env.GEMINI_API_KEY
-const AI_MODEL = 'google/gemma-4-31b-it:free'
+const AI_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
 
 function cleanJSON(rawText: string) {
   return rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/^[^{]*/, '').replace(/[^}]*$/, '').trim()
