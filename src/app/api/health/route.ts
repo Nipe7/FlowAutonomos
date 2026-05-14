@@ -19,7 +19,7 @@ export async function GET() {
           'HTTP-Referer': 'https://flowautonomos.netlify.app',
         },
         body: JSON.stringify({
-          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          model: 'deepseek/deepseek-v4-flash:free',
           messages: [{ role: 'user', content: 'Responde solo: OK' }],
           max_tokens: 5,
         }),
