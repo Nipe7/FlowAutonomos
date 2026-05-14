@@ -55,7 +55,7 @@ REGLAS IMPORTANTES:
 - Si el post es bueno, destaca lo que hace bien y como mejorarlo aun mas.
 - Las frases deben estar COMPLETAS, nunca cortadas.
 - Las recomendaciones deben ser ACCIONABLES, concretas y utiles.
-- Responde SIEMPRE en espanol.
+- Responde SIEMPRE en espanol. NUNCA respondas en ingles ni en otro idioma.
 
 Responde SOLO en JSON valido, sin markdown ni backticks:
 {"summary":"Diagnostico profesional en 2-3 frases completas","keyPoints":["punto clave 1 completo","punto clave 2 completo","punto clave 3 completo"],"recommendations":["recomendacion 1 accionable y completa","recomendacion 2 accionable y completa","recomendacion 3 accionable y completa"]}`
